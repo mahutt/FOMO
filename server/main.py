@@ -23,18 +23,13 @@ app = FastAPI()
 async def root():
     return {"message": "FOMO Server is running!"}
 
-
-@app.get("/rooms/{room_id}/reservation-status")
-async def read_room_status(room_id: str) -> RoomStatus:
-    return RoomStatus(
+@app.post("/sync/{room_id}")
+async def sync(room_id: str, data: list[OccupancyLogEntry]) -> RoomStatus:
+   print(data)
+   return RoomStatus(
         room_id=room_id,
         current_time=1625247600,
         currently_reserved=False,
         current_reservation_ends=None,
         next_reservation_starts=1625251200,
     )
-
-
-@app.post("/occupancy")
-async def log_occupancy(data: list[OccupancyLogEntry]):
-    return {"status": "success", "data_received": data}
