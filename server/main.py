@@ -8,6 +8,8 @@ from fastapi_utils.tasks import repeat_every
 import httpx
 import asyncio
 from datetime import timedelta, date
+from fastapi.middleware.cors import CORSMiddleware
+import random
 
 
 # Not peristed in DB
@@ -93,7 +95,8 @@ async def refresh_todays_slots(session: Session):
                     start=datetime.fromisoformat(slot["start"]),
                     end=datetime.fromisoformat(slot["end"]),
                     reserved=("className" in slot),
-                    occupied=False,
+                    occupied=random.randint(0, 1)
+                    == 1,  # Randomly assign occupied for demo purposes
                 )
                 session.merge(slot_record)
             session.commit()
@@ -104,6 +107,14 @@ async def refresh_todays_slots(session: Session):
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -133,6 +144,21 @@ async def sync(room_id: str, data: list[OccupancyLogEntry]) -> RoomStatus:
         current_reservation_ends=None,
         next_reservation_starts=1625251200,
     )
+
+
+@app.get("/slots")
+async def get_slots(
+    session: SessionDep,
+    start: Annotated[datetime, Query()],
+    end: Annotated[datetime, Query()],
+):
+    statement = select(Slot).where(
+        Slot.start >= start,
+        Slot.end <= end,
+    )
+    results = session.exec(statement)
+    slots = results.all()
+    return slots
 
 
 @app.get("/slots/{room_id}")
