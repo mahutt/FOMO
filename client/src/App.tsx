@@ -7,7 +7,7 @@ import { RoomUsageChart, type Slot } from './components/RoomUsageChart'
 const SERVER_URL =
   import.meta.env.MODE === 'development'
     ? 'http://localhost:8000'
-    : 'http://15.223.121.193:8000'
+    : 'https://335guy.com'
 
 async function fetchTimeslotData(): Promise<Slot[]> {
   const today = new Date()
