@@ -133,3 +133,20 @@ async def sync(room_id: str, data: list[OccupancyLogEntry]) -> RoomStatus:
         current_reservation_ends=None,
         next_reservation_starts=1625251200,
     )
+
+
+@app.get("/slots/{room_id}")
+async def get_slots(
+    room_id: str,
+    session: SessionDep,
+    start: Annotated[datetime, Query()],
+    end: Annotated[datetime, Query()],
+):
+    statement = select(Slot).where(
+        Slot.itemId == int(room_id),
+        Slot.start >= start,
+        Slot.end <= end,
+    )
+    results = session.exec(statement)
+    slots = results.all()
+    return slots
