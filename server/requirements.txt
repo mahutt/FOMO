@@ -8,6 +8,7 @@ email-validator==2.3.0
 fastapi==0.121.2
 fastapi-cli==0.0.16
 fastapi-cloud-cli==0.3.1
+fastapi-utils==0.8.0
 h11==0.16.0
 httpcore==1.0.9
 httptools==0.7.1
@@ -17,6 +18,8 @@ Jinja2==3.1.6
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
+mypy_extensions==1.1.0
+psutil==5.9.8
 pydantic==2.12.4
 pydantic_core==2.41.5
 Pygments==2.19.2
@@ -29,8 +32,11 @@ rignore==0.7.6
 sentry-sdk==2.45.0
 shellingham==1.5.4
 sniffio==1.3.1
+SQLAlchemy==2.0.44
+sqlmodel==0.0.27
 starlette==0.49.3
 typer==0.20.0
+typing-inspect==0.9.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.5.0
