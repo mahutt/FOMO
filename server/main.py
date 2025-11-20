@@ -12,18 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Not peristed in DB
 class RoomStatus(BaseModel):
-    room_id: str
+    room_id: int
     current_time: int
     currently_reserved: bool
     current_reservation_ends: int | None = None
     next_reservation_starts: int | None = None
-
-
-# Not peristed in DB
-class OccupancyLogEntry(BaseModel):
-    room_id: str
-    time: int
-    occupied: bool
 
 
 # Persisted in DB
@@ -139,14 +132,62 @@ async def root():
 
 
 @app.post("/sync/{room_id}")
-async def sync(room_id: str, data: list[OccupancyLogEntry]) -> RoomStatus:
-    print(data)
+async def sync(
+    room_id: str,
+    session: SessionDep,
+    occupied: int = Query(..., description="1 for occupied, 0 for unoccupied"),
+) -> RoomStatus:
+    occupied_bool = occupied == 1
+
+    now = datetime.now()
+    start = now.replace(second=0, microsecond=0)
+    start = start.replace(minute=(start.minute // 30) * 30)
+    end = start + timedelta(minutes=30)
+
+    statement = select(Slot).where(
+        Slot.itemId == int(room_id),
+        Slot.start <= now,
+        Slot.end >= now,
+    )
+    current_time_slot = session.exec(statement).first()
+
+    currently_reserved = False
+
+    # Only update if changing from unoccupied to occupied
+    if occupied_bool and current_time_slot and not current_time_slot.occupied:
+        current_time_slot.occupied = occupied == 1
+        session.add(current_time_slot)
+        session.commit()
+        session.refresh(current_time_slot)
+        print(
+            f"Updated occupancy for room {room_id} at {now} to {current_time_slot.occupied}"
+        )
+        currently_reserved = current_time_slot.reserved
+    elif current_time_slot:
+        currently_reserved = current_time_slot.reserved
+    else:
+        new_slot = Slot(
+            itemId=int(room_id),
+            start=start,
+            end=end,
+            reserved=False,
+            occupied=occupied_bool,
+        )
+        session.add(new_slot)
+        session.commit()
+        print(
+            f"Created new slot for room {room_id} at {now} with occupancy {new_slot.occupied}"
+        )
+        currently_reserved = False
+
     return RoomStatus(
         room_id=room_id,
-        current_time=1625247600,
-        currently_reserved=False,
-        current_reservation_ends=None,
-        next_reservation_starts=1625251200,
+        current_time=int(now.timestamp()),
+        currently_reserved=currently_reserved,
+        current_reservation_ends=(
+            int(end.timestamp()) if currently_reserved else None
+        ),  # temporary
+        next_reservation_starts=int(end.timestamp()),  # temporary
     )
 
 
