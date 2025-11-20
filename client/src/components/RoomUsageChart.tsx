@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { ComposedChart, XAxis, YAxis, Tooltip, Legend, Area } from 'recharts'
 import { ChartContainer, type ChartConfig } from './ui/chart'
+import { NAME_PER_ROOM_ID } from '@/lib/room-mapping'
 
 export interface Slot {
   itemId: number
@@ -95,7 +96,9 @@ export function RoomUsageChart({ roomId, slots, day }: RoomUsageChartProps) {
 
   return (
     <div className="w-full h-56 border rounded p-2 bg-background">
-      <h3 className="text-sm font-medium mb-2">Room {roomId}</h3>
+      <h3 className="text-sm font-medium mb-2">
+        Room {NAME_PER_ROOM_ID[roomId as keyof typeof NAME_PER_ROOM_ID]}
+      </h3>
       <ChartContainer
         config={chartConfig}
         className="min-h-[200px] h-[200px] w-full"
