@@ -97,7 +97,8 @@ export function RoomUsageChart({ roomId, slots, day }: RoomUsageChartProps) {
   return (
     <div className="w-full h-56 border rounded p-2 bg-background">
       <h3 className="text-sm font-medium mb-2">
-        Room {NAME_PER_ROOM_ID[roomId as keyof typeof NAME_PER_ROOM_ID]}
+        Room {NAME_PER_ROOM_ID[roomId as keyof typeof NAME_PER_ROOM_ID]} (
+        {roomId})
       </h3>
       <ChartContainer
         config={chartConfig}
