@@ -6,10 +6,8 @@ from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from fastapi_utils.tasks import repeat_every
 import httpx
-import asyncio
 from datetime import timedelta, date
 from fastapi.middleware.cors import CORSMiddleware
-import random
 
 
 # Not peristed in DB
@@ -88,17 +86,23 @@ async def refresh_todays_slots(session: Session):
                 f"Successfully fetched {len(slots)} slots using date {today} with status code: {response.status_code}"
             )
 
-            slot_records = []
             for slot in slots:
-                slot_record = Slot(
+                new_slot = Slot(
                     itemId=slot["itemId"],
                     start=datetime.fromisoformat(slot["start"]),
                     end=datetime.fromisoformat(slot["end"]),
                     reserved=("className" in slot),
-                    occupied=random.randint(0, 1)
-                    == 1,  # Randomly assign occupied for demo purposes
+                    occupied=False,
                 )
-                session.merge(slot_record)
+                statement = select(Slot).where(
+                    Slot.itemId == new_slot.itemId,
+                    Slot.start == new_slot.start,
+                    Slot.end == new_slot.end,
+                )
+                existing_slot = session.exec(statement).first()
+                if existing_slot:
+                    new_slot.occupied = existing_slot.occupied
+                session.merge(new_slot)
             session.commit()
             print("Database updated with latest slots.")
 
