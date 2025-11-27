@@ -3,7 +3,8 @@
 #include "Task.h"
 
 // Global constants
-const int PIR_PIN = 13;  // GPIO pin connected to PIR sensor output
+const int ITEM_ID = 18510;  // Room LB 451 - Brazil
+const int PIR_PIN = 13;     // GPIO pin connected to PIR sensor output
 
 // Global variables
 unsigned char motionDetectedFlag;
@@ -124,7 +125,9 @@ int TickFct_ServerSync(int state) {
       } else {
         Serial.println("FAILED TO CONNECT");
       }
-      client.print("GET / HTTP/1.1\r\nHost: ");
+      client.print("POST /sync/");
+      client.print(ITEM_ID);
+      client.print("?occupied=1 HTTP/1.1\r\nHost: ");
       client.print(host);
       client.print("\r\nConnection: close\r\n\r\n");
       break;
