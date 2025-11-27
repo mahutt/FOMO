@@ -1,6 +1,5 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <HTTPClient.h>
 #include "Task.h"
 
 // Global constants
@@ -33,12 +32,13 @@ enum SS_States { SS_SMStart,
 
 int TickFct_ServerSync(int state) {
   // Local constants
-  const char* ssid = "tommy";
+  const char* ssid = "sfctommy";
   const char* password = "fomopass";
-  const char* endpoint = "15.223.206.190";
+  const char* host = "335guy.com";
+  const unsigned short httpsPort = 443;
 
   // Local variables
-  static WiFiClient client;
+  static WiFiClientSecure client;
   static unsigned short waitCounter;
 
   // Transitions
@@ -52,6 +52,7 @@ int TickFct_ServerSync(int state) {
     case SS_WaitWifi:
       if (WiFi.status() == WL_CONNECTED) {
         state = SS_SyncStart;
+        client.setInsecure();
       } else if (WiFi.status() != WL_CONNECTED) {
         state = SS_WaitWifi;
       }
@@ -107,13 +108,13 @@ int TickFct_ServerSync(int state) {
       break;
     case SS_SyncStart:
       Serial.println("SS_SyncStart");
-      if (client.connect(endpoint, 8000)) {
+      if (client.connect(host, httpsPort)) {
         Serial.println("SUCCEEDED TO CONNECT");
       } else {
         Serial.println("FAILED TO CONNECT");
       }
       client.print("GET / HTTP/1.1\r\nHost: ");
-      client.print(endpoint);
+      client.print(host);
       client.print("\r\nConnection: close\r\n\r\n");
       break;
     case SS_SyncWait:
