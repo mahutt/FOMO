@@ -44,55 +44,69 @@ int TickFct_ServerSync(int state) {
   // Transitions
   switch (state) {
     case SS_SMStart:
+      Serial.println("-> SS_Init");
       state = SS_Init;  //Initial state
       break;
     case SS_Init:
+      Serial.println("-> SS_WaitWifi");
       state = SS_WaitWifi;
       break;
     case SS_WaitWifi:
       if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("-> SS_SyncStart");
         state = SS_SyncStart;
         client.setInsecure();
       } else if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("-> SS_WaitWifi");
         state = SS_WaitWifi;
       }
       break;
     case SS_SyncStart:
+      Serial.println("-> SS_SyncWait");
       state = SS_SyncWait;
       break;
     case SS_SyncWait:
       if (client.connected() && client.available()) {
         Serial.println("Connected and data available...");
+        Serial.println("-> SS_ProcessReservationStatus");
         state = SS_ProcessReservationStatus;
       } else if (client.connected() && !client.available()) {
         Serial.println("Connected but no data available...");
+        Serial.println("-> SS_SyncWait");
         state = SS_SyncWait;
       } else if (!client.connected()) {
+        Serial.println("-> SS_SyncStart");
         state = SS_SyncStart;
       }
       break;
     case SS_ProcessReservationStatus:
+      Serial.println("-> SS_WaitForMotionFlagReset");
       state = SS_WaitForMotionFlagReset;
       reqResetMotionDetectedFlag = 1;
       break;
     case SS_WaitForMotionFlagReset:
       if (ackResetMotionDetectedFlag) {
+        Serial.println("-> SS_RequestWait");
         state = SS_RequestWait;
         reqResetMotionDetectedFlag = 0;
         waitCounter = 0;
       } else if (!ackResetMotionDetectedFlag) {
+        Serial.println("-> SS_WaitForMotionFlagReset");
         state = SS_WaitForMotionFlagReset;
       }
       break;
     case SS_RequestWait:
       if (waitCounter >= 600) {
+        Serial.println("-> SS_SyncStart");
         state = SS_SyncStart;
       } else if (waitCounter < 600) {
+        Serial.println("-> SS_RequestWait");
         state = SS_RequestWait;
         waitCounter++;
       }
       break;
     default:
+      Serial.println("-> SS_SMStart");
       state = SS_SMStart;
       break;
   }
@@ -100,14 +114,11 @@ int TickFct_ServerSync(int state) {
   // Actions
   switch (state) {
     case SS_Init:
-      Serial.println("SS_Init");
       WiFi.begin(ssid, password);
       break;
     case SS_WaitWifi:
-      Serial.println("SS_WaitWifi");
       break;
     case SS_SyncStart:
-      Serial.println("SS_SyncStart");
       if (client.connect(host, httpsPort)) {
         Serial.println("SUCCEEDED TO CONNECT");
       } else {
@@ -118,19 +129,15 @@ int TickFct_ServerSync(int state) {
       client.print("\r\nConnection: close\r\n\r\n");
       break;
     case SS_SyncWait:
-      Serial.println("SS_SyncWait");
       break;
     case SS_ProcessReservationStatus:
-      Serial.println("SS_ProcessReservationStatus");
       static String response = "";
       response += client.readString();
       Serial.println(response);
       break;
     case SS_WaitForMotionFlagReset:
-      Serial.println("SS_WaitForMotionFlagReset");
       break;
     case SS_RequestWait:
-      Serial.println("SS_RequestWait");
       break;
     default:
       break;
