@@ -8,8 +8,6 @@ const int PIR_PIN = 13;     // GPIO pin connected to PIR sensor output
 
 // Global variables
 unsigned char motionDetectedFlag;
-unsigned char reqResetMotionDetectedFlag;
-unsigned char ackResetMotionDetectedFlag;
 
 // Global task variables
 task tasks[2];
@@ -28,7 +26,6 @@ enum SS_States { SS_SMStart,
                  SS_SyncStart,
                  SS_SyncWait,
                  SS_ProcessReservationStatus,
-                 SS_WaitForMotionFlagReset,
                  SS_RequestWait };
 
 int TickFct_ServerSync(int state) {
@@ -81,20 +78,10 @@ int TickFct_ServerSync(int state) {
       }
       break;
     case SS_ProcessReservationStatus:
-      Serial.println("-> SS_WaitForMotionFlagReset");
-      state = SS_WaitForMotionFlagReset;
-      reqResetMotionDetectedFlag = 1;
-      break;
-    case SS_WaitForMotionFlagReset:
-      if (ackResetMotionDetectedFlag) {
-        Serial.println("-> SS_RequestWait");
-        state = SS_RequestWait;
-        reqResetMotionDetectedFlag = 0;
-        waitCounter = 0;
-      } else if (!ackResetMotionDetectedFlag) {
-        Serial.println("-> SS_WaitForMotionFlagReset");
-        state = SS_WaitForMotionFlagReset;
-      }
+      Serial.println("-> SS_RequestWait");
+      state = SS_RequestWait;
+      motionDetectedFlag = 0;
+      waitCounter = 0;
       break;
     case SS_RequestWait:
       if (waitCounter >= 600) {
@@ -125,6 +112,8 @@ int TickFct_ServerSync(int state) {
       } else {
         Serial.println("FAILED TO CONNECT");
       }
+      Serial.print("Motion detected: ");
+      Serial.println(motionDetectedFlag);
       client.print("POST /sync/");
       client.print(ITEM_ID);
       client.print("?occupied=");
@@ -140,8 +129,6 @@ int TickFct_ServerSync(int state) {
       response += client.readString();
       Serial.println(response);
       break;
-    case SS_WaitForMotionFlagReset:
-      break;
     case SS_RequestWait:
       break;
     default:
@@ -151,11 +138,10 @@ int TickFct_ServerSync(int state) {
 }
 
 // ReadOccupancy (RO) SM
-enum RO_States { RO_SMStart,
-                 RO_Init,
-                 RO_WaitForMotion,
-                 RO_WaitForSync,
-                 RO_WaitForAck,
+enum RO_States {
+  RO_SMStart,
+  RO_Init,
+  RO_DetectMotion,
 };
 
 int TickFct_ReadOccupancy(int state) {
@@ -166,38 +152,12 @@ int TickFct_ReadOccupancy(int state) {
       state = RO_Init;  // Initial state
       break;
     case RO_Init:
-      Serial.println("-> RO_WaitForMotion");
-      state = RO_WaitForMotion;
+      Serial.println("-> RO_DetectMotion");
+      state = RO_DetectMotion;
       break;
-    case RO_WaitForMotion:
-      if (motionDetectedFlag) {
-        Serial.println("-> RO_WaitForSync");
-        state = RO_WaitForSync;
-      } else if (!motionDetectedFlag) {
-        Serial.println("-> RO_WaitForMotion");
-        state = RO_WaitForMotion;
-      }
-      break;
-    case RO_WaitForSync:
-      if (reqResetMotionDetectedFlag) {
-        Serial.println("-> RO_WaitForAck");
-        state = RO_WaitForAck;
-        motionDetectedFlag = 0;
-        ackResetMotionDetectedFlag = 1;
-      } else if (!reqResetMotionDetectedFlag) {
-        Serial.println("-> RO_WaitForSync");
-        state = RO_WaitForSync;
-      }
-      break;
-    case RO_WaitForAck:
-      if (!reqResetMotionDetectedFlag) {
-        Serial.println("-> RO_WaitForMotion");
-        state = RO_WaitForMotion;
-        ackResetMotionDetectedFlag = 0;
-      } else if (reqResetMotionDetectedFlag) {
-        Serial.println("-> RO_WaitForAck");
-        state = RO_WaitForAck;
-      }
+    case RO_DetectMotion:
+      Serial.println("-> RO_DetectMotion");
+      state = RO_DetectMotion;
       break;
     default:
       Serial.println("-> RO_SMStart");
@@ -210,12 +170,8 @@ int TickFct_ReadOccupancy(int state) {
     case RO_Init:
       motionDetectedFlag = 0;
       break;
-    case RO_WaitForMotion:
+    case RO_DetectMotion:
       motionDetectedFlag = (digitalRead(PIR_PIN) == HIGH);
-      break;
-    case RO_WaitForSync:
-      break;
-    case RO_WaitForAck:
       break;
     default:
       break;
