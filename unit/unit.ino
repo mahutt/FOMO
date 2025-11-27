@@ -162,36 +162,45 @@ int TickFct_ReadOccupancy(int state) {
   // Transitions
   switch (state) {
     case RO_SMStart:
+      Serial.println("-> RO_Init");
       state = RO_Init;  // Initial state
       break;
     case RO_Init:
+      Serial.println("-> RO_WaitForMotion");
       state = RO_WaitForMotion;
       break;
     case RO_WaitForMotion:
       if (motionDetectedFlag) {
+        Serial.println("-> RO_WaitForSync");
         state = RO_WaitForSync;
       } else if (!motionDetectedFlag) {
+        Serial.println("-> RO_WaitForMotion");
         state = RO_WaitForMotion;
       }
       break;
     case RO_WaitForSync:
       if (reqResetMotionDetectedFlag) {
+        Serial.println("-> RO_WaitForAck");
         state = RO_WaitForAck;
         motionDetectedFlag = 0;
         ackResetMotionDetectedFlag = 1;
       } else if (!reqResetMotionDetectedFlag) {
+        Serial.println("-> RO_WaitForSync");
         state = RO_WaitForSync;
       }
       break;
     case RO_WaitForAck:
       if (!reqResetMotionDetectedFlag) {
+        Serial.println("-> RO_WaitForMotion");
         state = RO_WaitForMotion;
         ackResetMotionDetectedFlag = 0;
       } else if (reqResetMotionDetectedFlag) {
+        Serial.println("-> RO_WaitForAck");
         state = RO_WaitForAck;
       }
       break;
     default:
+      Serial.println("-> RO_SMStart");
       state = RO_SMStart;
       break;
   }
