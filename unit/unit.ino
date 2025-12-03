@@ -1,6 +1,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
 #include "Task.h"
+#include "Buzzer.h"
 
 // Global constants
 const int ITEM_ID = 18510;  // Room LB 451 - Brazil
@@ -8,13 +10,18 @@ const int PIR_PIN = 13;     // GPIO pin connected to PIR sensor output
 
 // Global variables
 unsigned char motionDetectedFlag;
+unsigned char currentlyReserved;
+unsigned long currentReservationEnds;
+unsigned long nextReservationStarts;
+unsigned long currentTime;
 
 // Global task variables
-task tasks[2];
+task tasks[3];
 const unsigned char tasksNum = sizeof(tasks) / sizeof(tasks[0]);
 const unsigned long tasksPeriodGCD = 100;
 const unsigned long periodServerSync = 100;
 const unsigned long periodReadOccupancy = 100;
+const unsigned long periodNotifyStudent = 1000;
 
 task SS_task;
 task RO_task;
@@ -65,9 +72,14 @@ int TickFct_ServerSync(int state) {
       break;
     case SS_SyncWait:
       if (client.connected() && client.available()) {
-        Serial.println("Connected and data available...");
-        Serial.println("-> SS_ProcessReservationStatus");
-        state = SS_ProcessReservationStatus;
+        if (client.readStringUntil('\n') == "\r") {
+          Serial.println("Ready to process body");
+          Serial.println("-> SS_ProcessReservationStatus");
+          state = SS_ProcessReservationStatus;
+        } else {
+          Serial.println("-> SS_SyncWait");
+          state = SS_SyncWait;
+        }
       } else if (client.connected() && !client.available()) {
         Serial.println("Connected but no data available...");
         Serial.println("-> SS_SyncWait");
@@ -125,9 +137,26 @@ int TickFct_ServerSync(int state) {
     case SS_SyncWait:
       break;
     case SS_ProcessReservationStatus:
-      static String response = "";
-      response += client.readString();
-      Serial.println(response);
+      {
+        String jsonBody = client.readString();
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, jsonBody);
+        if (error) {
+          Serial.print("JSON parsing failed: ");
+          Serial.println(error.c_str());
+        } else {
+          // long room_id = doc["room_id"]; // TODO: make it possible to re-assign associated room remotely
+          currentlyReserved = doc["currently_reserved"];
+          currentReservationEnds = doc["current_reservation_ends"];
+          nextReservationStarts = doc["next_reservation_starts"];
+          currentTime = doc["current_time"];
+          Serial.println("Variables set for NS SM");
+          Serial.println(currentlyReserved);
+          Serial.println(currentReservationEnds);
+          Serial.println(nextReservationStarts);
+          Serial.println(currentTime);
+        }
+      }
       break;
     case SS_RequestWait:
       break;
@@ -142,6 +171,7 @@ enum RO_States {
   RO_SMStart,
   RO_Init,
   RO_DetectMotion,
+  RO_Wait
 };
 
 int TickFct_ReadOccupancy(int state) {
@@ -156,8 +186,22 @@ int TickFct_ReadOccupancy(int state) {
       state = RO_DetectMotion;
       break;
     case RO_DetectMotion:
-      Serial.println("-> RO_DetectMotion");
-      state = RO_DetectMotion;
+      if (motionDetectedFlag) {
+        Serial.println("-> RO_Wait");
+        state = RO_Wait;
+      } else if (!motionDetectedFlag) {
+        Serial.println("-> RO_DetectMotion");
+        state = RO_DetectMotion;
+      }
+      break;
+    case RO_Wait:
+      if (motionDetectedFlag) {
+        Serial.println("-> RO_Wait");
+        state = RO_Wait;
+      } else if (!motionDetectedFlag) {
+        Serial.println("-> RO_DetectMotion");
+        state = RO_DetectMotion;
+      }
       break;
     default:
       Serial.println("-> RO_SMStart");
@@ -172,6 +216,69 @@ int TickFct_ReadOccupancy(int state) {
       break;
     case RO_DetectMotion:
       motionDetectedFlag = (digitalRead(PIR_PIN) == HIGH);
+      break;
+    case RO_Wait:
+      break;
+    default:
+      break;
+  }
+
+  return state;
+}
+
+
+// NotifyStudent (NS) SM
+enum NS_States {
+  NS_SMStart,
+  NS_WaitThreshold,
+  NS_Notify,
+  NS_WaitEnd,
+};
+
+int TickFct_NotifyStudent(int state) {
+  // Local constants
+  const short notificationLeadSeconds = 1500;  // 1500 seconds = 25 minutes
+
+  // Transitions
+  switch (state) {
+    case NS_SMStart:
+      Serial.println("-> NS_WaitThreshold");
+      state = NS_WaitThreshold;  // Initial state
+      break;
+    case NS_WaitThreshold:
+      if (currentlyReserved && (currentReservationEnds - currentTime) < notificationLeadSeconds) {
+        Serial.println("-> NS_Notify");
+        state = NS_Notify;
+      } else {
+        Serial.println("-> NS_WaitThreshold");
+        state = NS_WaitThreshold;
+      }
+      break;
+    case NS_Notify:
+      Serial.println("-> NS_WaitEnd");
+      state = NS_WaitEnd;
+      break;
+    case NS_WaitEnd:
+      if ((currentReservationEnds - currentTime) < notificationLeadSeconds) {
+        Serial.println("-> NS_WaitEnd");
+        state = NS_WaitEnd;
+      } else {
+        state = NS_WaitThreshold;
+      }
+      break;
+    default:
+      state = NS_SMStart;
+      break;
+  }
+
+  // Actions
+  switch (state) {
+    case NS_WaitThreshold:
+      break;
+    case NS_Notify:
+      buzzerPlay(notification);
+      break;
+    case NS_WaitEnd:
       break;
     default:
       break;
@@ -203,12 +310,20 @@ void setup() {
   tasks[i].period = periodServerSync;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_ServerSync;
+
   // ReadOccupancy (RO) Setup
   ++i;
   tasks[i].state = RO_SMStart;
   tasks[i].period = periodReadOccupancy;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_ReadOccupancy;
+
+  // NotifyStudent (NS) Setup
+  ++i;
+  tasks[i].state = NS_SMStart;
+  tasks[i].period = periodNotifyStudent;
+  tasks[i].elapsedTime = tasks[i].period;
+  tasks[i].TickFct = &TickFct_NotifyStudent;
 
   // TimerSet(tasksPeriodGCD);
   // TimerOn();
