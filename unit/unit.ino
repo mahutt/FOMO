@@ -11,7 +11,7 @@ unsigned char motionDetectedFlag;
 
 // Global task variables
 task tasks[2];
-const unsigned char tasksNum = 2;
+const unsigned char tasksNum = sizeof(tasks) / sizeof(tasks[0]);
 const unsigned long tasksPeriodGCD = 100;
 const unsigned long periodServerSync = 100;
 const unsigned long periodReadOccupancy = 100;
