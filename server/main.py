@@ -28,6 +28,12 @@ class Slot(SQLModel, table=True):
     occupied: bool = Field(default=False)
 
 
+class OccupancyLog(SQLModel, table=True):
+    itemId: int = Field(primary_key=True)
+    timestamp: datetime = Field(primary_key=True)
+    occupied: bool
+
+
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
@@ -138,14 +144,23 @@ async def sync(
     occupied: int = Query(..., description="1 for occupied, 0 for unoccupied"),
 ) -> RoomStatus:
     occupied_bool = occupied == 1
-
     now = datetime.now()
+    item_id = int(room_id)
+
+    occupancy_log = OccupancyLog(
+        itemId=item_id,
+        timestamp=now,
+        occupied=occupied_bool,
+    )
+    session.add(occupancy_log)
+    session.commit()
+
     start = now.replace(second=0, microsecond=0)
     start = start.replace(minute=(start.minute // 30) * 30)
     end = start + timedelta(minutes=30)
 
     statement = select(Slot).where(
-        Slot.itemId == int(room_id),
+        Slot.itemId == item_id,
         Slot.start <= now,
         Slot.end >= now,
     )
@@ -153,8 +168,8 @@ async def sync(
 
     currently_reserved = False
 
-    # Only update if changing from unoccupied to occupied
     if occupied_bool and current_time_slot and not current_time_slot.occupied:
+        # Only update if changing from unoccupied to occupied
         current_time_slot.occupied = occupied == 1
         session.add(current_time_slot)
         session.commit()
@@ -167,7 +182,7 @@ async def sync(
         currently_reserved = current_time_slot.reserved
     else:
         new_slot = Slot(
-            itemId=int(room_id),
+            itemId=item_id,
             start=start,
             end=end,
             reserved=False,
@@ -176,12 +191,12 @@ async def sync(
         session.add(new_slot)
         session.commit()
         print(
-            f"Created new slot for room {room_id} at {now} with occupancy {new_slot.occupied}"
+            f"Created new slot for room {item_id} at {now} with occupancy {new_slot.occupied}"
         )
         currently_reserved = False
 
     return RoomStatus(
-        room_id=room_id,
+        room_id=item_id,
         current_time=int(now.timestamp()),
         currently_reserved=currently_reserved,
         current_reservation_ends=(
