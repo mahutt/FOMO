@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from './components/ui/button'
 import { RoomUsageChart, type Slot } from './components/RoomUsageChart'
+import { CalendarDropdown } from './components/calendar-dropdown'
 
 // Slot interface moved into RoomUsageChart for reuse.
 
@@ -16,11 +17,10 @@ function toLocalISODate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-async function fetchTimeslotData(): Promise<Slot[]> {
-  const today = new Date()
-  const startDate = toLocalISODate(today)
+async function fetchTimeslotData(date: Date): Promise<Slot[]> {
+  const startDate = toLocalISODate(date)
 
-  const end = new Date(today)
+  const end = new Date(date)
   end.setDate(end.getDate() + 1)
   const endDate = toLocalISODate(end)
   const response = await fetch(
@@ -32,18 +32,19 @@ async function fetchTimeslotData(): Promise<Slot[]> {
 }
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [date, setDate] = useState<Date | undefined>(new Date())
   const [slots, setSlots] = useState<Slot[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!date) return
     setLoading(true)
-    fetchTimeslotData()
+    fetchTimeslotData(date)
       .then((data) => setSlots(data))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [date])
 
   // Group slots by itemId
   const grouped = slots.reduce<Record<number, Slot[]>>((acc, slot) => {
@@ -59,14 +60,13 @@ function App() {
       <header className="flex items-center gap-4">
         <h1 className="text-xl font-semibold">FOMO Monitor</h1>
         <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => setCount((c) => c + 1)}>
-            Test Button {count}
-          </Button>
+          <CalendarDropdown date={date} setDate={setDate} />
           <Button
             variant="outline"
             onClick={() => {
+              if (!date) return
               setLoading(true)
-              fetchTimeslotData()
+              fetchTimeslotData(date)
                 .then((data) => setSlots(data))
                 .catch((e) => setError(e.message))
                 .finally(() => setLoading(false))
