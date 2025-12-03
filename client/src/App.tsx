@@ -9,12 +9,20 @@ const SERVER_URL =
     ? 'http://localhost:8000'
     : 'https://335guy.com'
 
+function toLocalISODate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 async function fetchTimeslotData(): Promise<Slot[]> {
   const today = new Date()
-  const startDate = today.toISOString().slice(0, 10)
+  const startDate = toLocalISODate(today)
+
   const end = new Date(today)
   end.setDate(end.getDate() + 1)
-  const endDate = end.toISOString().slice(0, 10)
+  const endDate = toLocalISODate(end)
   const response = await fetch(
     `${SERVER_URL}/slots?start=${startDate}&end=${endDate}`
   )
