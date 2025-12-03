@@ -236,3 +236,56 @@ async def get_slots(
     results = session.exec(statement)
     slots = results.all()
     return slots
+
+
+@app.get("/occupancy_logs")
+async def get_occupancy_logs(
+    session: SessionDep,
+    start: Annotated[datetime, Query()],
+    end: Annotated[datetime, Query()],
+):
+    statement = select(OccupancyLog).where(
+        OccupancyLog.timestamp >= start,
+        OccupancyLog.timestamp <= end,
+    )
+    results = session.exec(statement)
+    logs = results.all()
+    return logs
+
+
+@app.get("/occupancy_logs/{room_id}")
+async def get_occupancy_logs(
+    room_id: str,
+    session: SessionDep,
+    start: Annotated[datetime, Query()],
+    end: Annotated[datetime, Query()],
+):
+    statement = select(OccupancyLog).where(
+        OccupancyLog.itemId == int(room_id),
+        OccupancyLog.timestamp >= start,
+        OccupancyLog.timestamp <= end,
+    )
+    results = session.exec(statement)
+    logs = results.all()
+    return logs
+
+
+@app.get("/occupancy_logs/{room_id}/latest")
+async def get_latest_occupancy_log(
+    room_id: str,
+    session: SessionDep,
+):
+    statement = (
+        select(OccupancyLog)
+        .where(
+            OccupancyLog.itemId == int(room_id),
+        )
+        .order_by(OccupancyLog.timestamp.desc())
+    )
+    results = session.exec(statement)
+    log = results.first()
+    if not log:
+        raise HTTPException(
+            status_code=404, detail="No occupancy logs found for this room"
+        )
+    return log
