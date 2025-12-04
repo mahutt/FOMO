@@ -1,6 +1,12 @@
 import { Legend, RadialBar, RadialBarChart } from 'recharts'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   type ChartConfig,
   ChartContainer,
@@ -16,7 +22,7 @@ export interface RoomStats {
   reservedPercentage: number
   occupiedPercentage: number
   ghostReservations: number
-  averageReservationUse: number
+  averageStudySessionDuration: number
 }
 
 const chartConfig = {
@@ -77,6 +83,14 @@ export function RoomStats({
     <Card className="w-[400px] flex flex-col">
       <CardHeader className="items-center pb-0">
         <CardTitle>Room Uilization</CardTitle>
+        <CardDescription>
+          <span>Ghost reservations: {stats.ghostReservations}</span>
+
+          <br />
+          <span>
+            Average study session: {stats.averageStudySessionDuration} min
+          </span>
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 pb-0">
         <ChartContainer

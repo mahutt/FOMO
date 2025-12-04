@@ -387,12 +387,62 @@ def calculate_occupancy_percentage(
     return round(percentage, 2)
 
 
+def compute_average_study_session_duration(
+    logs: list[OccupancyLog], occupancy_window: int
+) -> int:
+    """
+    Compute the average study session duration in minutes.
+
+    Each occupied log indicates a continuous study session of occupancy_window minutes.
+    Consecutive occupied logs are considered part of the same session.
+
+    Args:
+        logs: List of OccupancyLog entries for a single room
+        occupancy_window: Time window in minutes to consider a log as occupied (e.g., 5 minutes)
+    Returns:
+        Average study session duration in minutes
+    """
+    # Filter to only occupied logs and sort by timestamp
+    occupied_logs = sorted(
+        [log for log in logs if log.occupied], key=lambda x: x.timestamp
+    )
+
+    if not occupied_logs:
+        return 0
+
+    sessions = []
+    session_start = occupied_logs[0].timestamp
+    session_end = session_start + timedelta(minutes=occupancy_window)
+
+    for log in occupied_logs[1:]:
+        log_start = log.timestamp - timedelta(minutes=occupancy_window)
+        log_end = log.timestamp
+
+        if log_start <= session_end:
+            # Extend the current session
+            session_end = max(session_end, log_end)
+        else:
+            # Save the current session and start a new one
+            sessions.append((session_start, session_end))
+            session_start = log.timestamp
+            session_end = session_start + timedelta(minutes=occupancy_window)
+
+    # Don't forget the last session
+    sessions.append((session_start, session_end))
+
+    # Calculate average duration
+    total_duration = sum((end - start).total_seconds() / 60 for start, end in sessions)
+    average_duration = total_duration / len(sessions)
+
+    return round(average_duration)
+
+
 # DATA / ANALYSIS ENDPOINTS
 class RoomStats(BaseModel):
     reservedPercentage: int
     occupiedPercentage: int
     ghostReservations: int
-    averageReservationUsePercentage: int
+    averageStudySessionDuration: int
 
 
 EARLIEST_RESERVATION_HOURS = 8
@@ -442,9 +492,30 @@ async def get_occupancy_logs(
     # Compute the percentage of time the room is occupied during the day
     occupied_percentage = calculate_occupancy_percentage(logs, occupancy_window)
 
+    # Compute the number of ghost reservations (assume each slot is 30 minutes and = 1 reservation)
+    # i.e., the number of slots that are reserved but for which there is no corresponding occupied log
+    ghost_reservations = 0
+
+    for slot in slots:
+        if slot.reserved:
+            # Check if there are any occupied logs during this slot
+            slot_logs = [
+                log
+                for log in logs
+                if slot.start <= log.timestamp <= slot.end and log.occupied
+            ]
+            if not slot_logs:
+                ghost_reservations += 1
+
+    # Compute the average study session duration (in minutes) using the occupancy logs and occupancy_window
+    # For simplicity, we assume each occupied log indicates a continuous study session of occupancy_window minutes
+    average_study_session_duration = compute_average_study_session_duration(
+        logs, occupancy_window
+    )
+
     return RoomStats(
         reservedPercentage=int(reserved_percentage),
         occupiedPercentage=int(occupied_percentage),
-        ghostReservations=0,  # TODO implement
-        averageReservationUsePercentage=0,  # TODO implement
+        ghostReservations=ghost_reservations,
+        averageStudySessionDuration=average_study_session_duration,
     )
