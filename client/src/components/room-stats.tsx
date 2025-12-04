@@ -1,12 +1,6 @@
 import { Legend, RadialBar, RadialBarChart } from 'recharts'
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   type ChartConfig,
   ChartContainer,
@@ -83,7 +77,6 @@ export function RoomStats({
     <Card className="w-[400px] flex flex-col">
       <CardHeader className="items-center pb-0">
         <CardTitle>Room Uilization</CardTitle>
-        <CardDescription>January - June 2024</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 pb-0">
         <ChartContainer
