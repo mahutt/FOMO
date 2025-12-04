@@ -9,6 +9,11 @@ import httpx
 from datetime import timedelta, date
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import the User model and routers
+from models import User
+import user_routes
+import auth_routes
+
 
 # Not peristed in DB
 class RoomStatus(BaseModel):
@@ -118,6 +123,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(user_routes.router)
+app.include_router(auth_routes.router)
 
 
 @app.on_event("startup")
