@@ -2,13 +2,10 @@ import { useEffect, useState } from 'react'
 import { Button } from './components/ui/button'
 import { RoomUsageChart, type Slot } from './components/RoomUsageChart'
 import { CalendarDropdown } from './components/calendar-dropdown'
+import { RoomStats } from './components/room-stats'
+import { SERVER_URL } from './constants'
 
 // Slot interface moved into RoomUsageChart for reuse.
-
-const SERVER_URL =
-  import.meta.env.MODE === 'development'
-    ? 'http://localhost:8000'
-    : 'https://335guy.com'
 
 function toLocalISODate(date: Date): string {
   const year = date.getFullYear()
@@ -31,20 +28,26 @@ async function fetchTimeslotData(date: Date): Promise<Slot[]> {
   return data as Slot[]
 }
 
+const defaultStartDate = new Date()
+// make default end date one day after start date
+const defaultEndDate = new Date()
+defaultEndDate.setDate(defaultStartDate.getDate() + 1)
+
 function App() {
-  const [date, setDate] = useState<Date | undefined>(new Date())
+  const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate)
+  const [endDate, setEndDate] = useState<Date | undefined>(defaultEndDate)
   const [slots, setSlots] = useState<Slot[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!date) return
+    if (!startDate) return
     setLoading(true)
-    fetchTimeslotData(date)
+    fetchTimeslotData(startDate)
       .then((data) => setSlots(data))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [date])
+  }, [startDate])
 
   // Group slots by itemId
   const grouped = slots.reduce<Record<number, Slot[]>>((acc, slot) => {
@@ -60,13 +63,13 @@ function App() {
       <header className="flex items-center gap-4">
         <h1 className="text-xl font-semibold">FOMO Monitor</h1>
         <div className="ml-auto flex items-center gap-2">
-          <CalendarDropdown date={date} setDate={setDate} />
+          <CalendarDropdown date={startDate} setDate={setStartDate} />
           <Button
             variant="outline"
             onClick={() => {
-              if (!date) return
+              if (!startDate) return
               setLoading(true)
-              fetchTimeslotData(date)
+              fetchTimeslotData(startDate)
                 .then((data) => setSlots(data))
                 .catch((e) => setError(e.message))
                 .finally(() => setLoading(false))
@@ -80,12 +83,20 @@ function App() {
       {error && <p className="text-sm text-red-600">Error: {error}</p>}
       <div className="flex flex-col gap-8">
         {Object.entries(grouped).map(([roomId, roomSlots]) => (
-          <RoomUsageChart
-            key={roomId}
-            roomId={Number(roomId)}
-            slots={roomSlots}
-            day={today}
-          />
+          <div key={roomId} className="flex flex-row gap-8">
+            <RoomUsageChart
+              roomId={Number(roomId)}
+              slots={roomSlots}
+              day={today}
+            />
+            {startDate && endDate && (
+              <RoomStats
+                roomId={roomId}
+                startDate={toLocalISODate(startDate)}
+                endDate={toLocalISODate(endDate)}
+              />
+            )}
+          </div>
         ))}
         {!loading && slots.length === 0 && !error && (
           <div className="text-sm text-muted-foreground">

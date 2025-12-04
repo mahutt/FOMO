@@ -289,3 +289,153 @@ async def get_latest_occupancy_log(
             status_code=404, detail="No occupancy logs found for this room"
         )
     return log
+
+
+# DATA / ANALYSIS HELPERS
+
+
+def calculate_occupancy_percentage(
+    logs: list[OccupancyLog], occupancy_window: int
+) -> int:
+    """
+    Calculate the percentage of time a room was occupied between 8 AM and 11 PM.
+
+    Each log indicates the room was occupied for at least the past occupancy_window minutes.
+    Overlapping periods are merged to avoid double-counting.
+
+    Args:
+        logs: List of OccupancyLog entries for a single room
+        occupancy_window: Time window in minutes to consider a log as occupied (e.g., 5 minutes)
+
+    Returns:
+        Percentage of time occupied (0-100)
+    """
+    # Filter to only occupied logs
+    occupied_logs = [log for log in logs if log.occupied]
+
+    if not occupied_logs:
+        return 0
+
+    # Create intervals: each log represents [timestamp - 5min, timestamp]
+    intervals = []
+    for log in occupied_logs:
+        end_time = log.timestamp
+        start_time = end_time - timedelta(minutes=occupancy_window)
+        intervals.append((start_time, end_time))
+
+    # Sort intervals by start time
+    intervals.sort()
+
+    # Merge overlapping intervals
+    merged = []
+    current_start, current_end = intervals[0]
+
+    for start, end in intervals[1:]:
+        if start <= current_end:
+            # Overlapping or adjacent - merge them
+            current_end = max(current_end, end)
+        else:
+            # No overlap - save current and start new interval
+            merged.append((current_start, current_end))
+            current_start, current_end = start, end
+
+    # Don't forget the last interval
+    merged.append((current_start, current_end))
+
+    # Calculate total occupied minutes within 8 AM - 11 PM window
+    total_occupied_minutes = 0
+
+    for start, end in merged:
+        # For each day in the interval, clip to 8 AM - 11 PM
+        current_day = start.date()
+        end_day = end.date()
+
+        # Handle intervals that might span multiple days
+        day = current_day
+        while day <= end_day:
+            day_start = datetime.combine(day, datetime.min.time().replace(hour=8))
+            day_end = datetime.combine(day, datetime.min.time().replace(hour=23))
+
+            # Clip interval to this day's 8 AM - 11 PM window
+            clipped_start = max(start, day_start)
+            clipped_end = min(end, day_end)
+
+            if clipped_start < clipped_end:
+                duration = (clipped_end - clipped_start).total_seconds() / 60
+                total_occupied_minutes += duration
+
+            day += timedelta(days=1)
+
+    # Calculate total available minutes (15 hours per day)
+    # Determine how many days are covered
+    first_log = min(log.timestamp for log in occupied_logs)
+    last_log = max(log.timestamp for log in occupied_logs)
+
+    days_covered = (last_log.date() - first_log.date()).days + 1
+    total_available_minutes = days_covered * 15 * 60  # 15 hours = 900 minutes per day
+
+    percentage = (total_occupied_minutes / total_available_minutes) * 100
+    return round(percentage, 2)
+
+
+# DATA / ANALYSIS ENDPOINTS
+class RoomStats(BaseModel):
+    reservedPercentage: int
+    occupiedPercentage: int
+    ghostReservations: int
+    averageReservationUsePercentage: int
+
+
+EARLIEST_RESERVATION_HOURS = 8
+LATEST_RESERVATION_HOURS = 23
+
+
+@app.get("/stats/{room_id}")
+async def get_occupancy_logs(
+    room_id: str,
+    session: SessionDep,
+    start: Annotated[datetime, Query()],
+    end: Annotated[datetime, Query()],
+    occupancy_window: Annotated[int, Query()] = 5,
+) -> RoomStats:
+    statement = select(Slot).where(
+        Slot.itemId == int(room_id),
+        Slot.start >= start,
+        Slot.end <= end,
+    )
+    slot_results = session.exec(statement)
+    slots: list[Slot] = slot_results.all()
+
+    statement = select(OccupancyLog).where(
+        OccupancyLog.itemId == int(room_id),
+        OccupancyLog.timestamp >= start,
+        OccupancyLog.timestamp <= end,
+    )
+    results = session.exec(statement)
+    logs: list[OccupancyLog] = results.all()
+
+    # Compute the percentage of time between 8 AM and 11 PM that the room is reserved
+    maximum_reservation_minutes = (
+        LATEST_RESERVATION_HOURS - EARLIEST_RESERVATION_HOURS
+    ) * 60
+
+    total_reservation_minutes = 0
+
+    for slot in slots:
+        if slot.reserved:
+            # We assume each slot is 30 minutes
+            total_reservation_minutes += 30
+
+    reserved_percentage = int(
+        (total_reservation_minutes / maximum_reservation_minutes) * 100
+    )
+
+    # Compute the percentage of time the room is occupied during the day
+    occupied_percentage = calculate_occupancy_percentage(logs, occupancy_window)
+
+    return RoomStats(
+        reservedPercentage=int(reserved_percentage),
+        occupiedPercentage=int(occupied_percentage),
+        ghostReservations=0,  # TODO implement
+        averageReservationUsePercentage=0,  # TODO implement
+    )
