@@ -17,19 +17,19 @@ SessionDep = Depends(get_session)
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 
 class LoginResponse(BaseModel):
     user_id: int
-    username: str
+    email: str
     user_type: UserType
     message: str
 
 
 class RegisterRequest(BaseModel):
-    username: str
+    email: str
     password: str
     user_type: UserType
 
@@ -37,15 +37,15 @@ class RegisterRequest(BaseModel):
 @router.post("/register", response_model=LoginResponse)
 async def register(request: RegisterRequest, session: Session = SessionDep):
     """Register a new user"""
-    # Check if username already exists
-    statement = select(User).where(User.username == request.username)
+    # Check if email already exists
+    statement = select(User).where(User.email == request.email)
     existing_user = session.exec(statement).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="Email already exists")
 
     # Create new user
     user = User(
-        username=request.username,
+        email=request.email,
         password=request.password,
         user_type=request.user_type,
     )
@@ -56,7 +56,7 @@ async def register(request: RegisterRequest, session: Session = SessionDep):
 
     return LoginResponse(
         user_id=user.id,
-        username=user.username,
+        email=user.email,
         user_type=user.user_type,
         message="User registered successfully",
     )
@@ -65,16 +65,16 @@ async def register(request: RegisterRequest, session: Session = SessionDep):
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, session: Session = SessionDep):
     """Login a user"""
-    # Find user by username
-    statement = select(User).where(User.username == request.username)
+    # Find user by email
+    statement = select(User).where(User.email == request.email)
     user = session.exec(statement).first()
 
     if not user or user.password != request.password:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     return LoginResponse(
         user_id=user.id,
-        username=user.username,
+        email=user.email,
         user_type=user.user_type,
         message="Login successful",
     )
@@ -89,7 +89,7 @@ async def get_current_user(user_id: int, session: Session = SessionDep):
 
     return LoginResponse(
         user_id=user.id,
-        username=user.username,
+        email=user.email,
         user_type=user.user_type,
         message="User info retrieved successfully",
     )

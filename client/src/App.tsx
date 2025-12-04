@@ -3,6 +3,8 @@ import { Button } from './components/ui/button'
 import { RoomUsageChart, type Slot } from './components/RoomUsageChart'
 import { CalendarDropdown } from './components/calendar-dropdown'
 import { RoomStats } from './components/room-stats'
+import { LoginDialog } from './components/LoginDialog'
+import { useAuth } from './contexts/AuthContext'
 import { SERVER_URL } from './constants'
 import {
   OccupancyWindow,
@@ -38,6 +40,7 @@ const defaultEndDate = new Date()
 defaultEndDate.setDate(defaultStartDate.getDate() + 1)
 
 function App() {
+  const { isAdmin } = useAuth()
   const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate)
   const [endDate, _] = useState<Date | undefined>(defaultEndDate)
   const [slots, setSlots] = useState<Slot[]>([])
@@ -86,6 +89,7 @@ function App() {
           >
             Refresh
           </Button>
+          <LoginDialog />
         </div>
       </header>
       {loading && <p className="text-sm">Loading slots...</p>}
@@ -98,7 +102,7 @@ function App() {
               slots={roomSlots}
               day={today}
             />
-            {startDate && endDate && (
+            {isAdmin && startDate && endDate && (
               <RoomStats
                 roomId={roomId}
                 startDate={toLocalISODate(startDate)}

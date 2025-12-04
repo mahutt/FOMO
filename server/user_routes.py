@@ -19,11 +19,11 @@ SessionDep = Depends(get_session)
 @router.post("/", response_model=User)
 async def create_user(user: User, session: Session = SessionDep):
     """Create a new user"""
-    # Check if username already exists
-    statement = select(User).where(User.username == user.username)
+    # Check if email already exists
+    statement = select(User).where(User.email == user.email)
     existing_user = session.exec(statement).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="Email already exists")
 
     session.add(user)
     session.commit()
@@ -55,14 +55,14 @@ async def update_user(user_id: int, user_update: User, session: Session = Sessio
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check if new username already exists (if username is being changed)
-    if user_update.username != user.username:
-        statement = select(User).where(User.username == user_update.username)
+    # Check if new email already exists (if email is being changed)
+    if user_update.email != user.email:
+        statement = select(User).where(User.email == user_update.email)
         existing_user = session.exec(statement).first()
         if existing_user:
-            raise HTTPException(status_code=400, detail="Username already exists")
+            raise HTTPException(status_code=400, detail="Email already exists")
 
-    user.username = user_update.username
+    user.email = user_update.email
     user.password = user_update.password
     user.user_type = user_update.user_type
 
