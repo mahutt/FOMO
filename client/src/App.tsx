@@ -35,7 +35,7 @@ defaultEndDate.setDate(defaultStartDate.getDate() + 1)
 
 function App() {
   const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate)
-  const [endDate, setEndDate] = useState<Date | undefined>(defaultEndDate)
+  const [endDate, _] = useState<Date | undefined>(defaultEndDate)
   const [slots, setSlots] = useState<Slot[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
