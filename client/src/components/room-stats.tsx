@@ -47,10 +47,12 @@ export function RoomStats({
   roomId,
   startDate,
   endDate,
+  occupancyWindow,
 }: {
   roomId: string
   startDate: string
   endDate: string
+  occupancyWindow: number
 }) {
   const [stats, setStats] = useState<RoomStats | null>(null)
 
@@ -58,7 +60,7 @@ export function RoomStats({
     async function fetchRoomStats() {
       try {
         const response = await fetch(
-          `${SERVER_URL}/stats/${roomId}?start=${startDate}&end=${endDate}`
+          `${SERVER_URL}/stats/${roomId}?start=${startDate}&end=${endDate}&occupancy_window=${occupancyWindow}`
         )
         if (!response.ok) {
           throw new Error('Failed to fetch room stats')
@@ -71,7 +73,7 @@ export function RoomStats({
     }
 
     fetchRoomStats()
-  }, [roomId])
+  }, [roomId, , startDate, endDate, occupancyWindow])
 
   if (!stats) {
     return <div>Loading...</div>

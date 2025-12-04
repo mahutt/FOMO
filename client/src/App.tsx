@@ -4,6 +4,10 @@ import { RoomUsageChart, type Slot } from './components/RoomUsageChart'
 import { CalendarDropdown } from './components/calendar-dropdown'
 import { RoomStats } from './components/room-stats'
 import { SERVER_URL } from './constants'
+import {
+  OccupancyWindow,
+  OccupancyWindowSelector,
+} from './components/occupancy-window-selector'
 
 // Slot interface moved into RoomUsageChart for reuse.
 
@@ -39,6 +43,7 @@ function App() {
   const [slots, setSlots] = useState<Slot[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [occupancyWindow, setOccupancyWindow] = useState<OccupancyWindow>(30)
 
   useEffect(() => {
     if (!startDate) return
@@ -63,6 +68,10 @@ function App() {
       <header className="flex items-center gap-4">
         <h1 className="text-xl font-semibold">FOMO Monitor</h1>
         <div className="ml-auto flex items-center gap-2">
+          <OccupancyWindowSelector
+            occupancyWindow={occupancyWindow}
+            setOccupancyWindow={setOccupancyWindow}
+          />
           <CalendarDropdown date={startDate} setDate={setStartDate} />
           <Button
             variant="outline"
@@ -94,6 +103,7 @@ function App() {
                 roomId={roomId}
                 startDate={toLocalISODate(startDate)}
                 endDate={toLocalISODate(endDate)}
+                occupancyWindow={occupancyWindow}
               />
             )}
           </div>
