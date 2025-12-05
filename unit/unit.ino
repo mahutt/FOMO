@@ -110,6 +110,11 @@ int TickFct_ServerSync(int state) {
       } else if (waitCounter < 600) {
         state = SS_RequestWait;
         waitCounter++;
+        // Logging every 10 seconds:
+        if (waitCounter % 100 == 0) {
+          Serial.print("Seconds until next sync: ");
+          Serial.println((600 - waitCounter) / 10);
+        }
       }
       break;
     default:
