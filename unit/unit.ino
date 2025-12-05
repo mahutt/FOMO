@@ -36,13 +36,15 @@ task SS_task;
 task RO_task;
 
 // ServerSync (SS) SM
-enum SS_States { SS_SMStart,
-                 SS_Init,
-                 SS_WaitWifi,
-                 SS_SyncStart,
-                 SS_SyncWait,
-                 SS_ProcessReservationStatus,
-                 SS_RequestWait };
+enum SS_States {
+  SS_SMStart,
+  SS_Init,
+  SS_WaitWifi,
+  SS_SyncStart,
+  SS_SyncWait,
+  SS_ProcessReservationStatus,
+  SS_RequestWait
+};
 
 int TickFct_ServerSync(int state) {
   // Local constants
