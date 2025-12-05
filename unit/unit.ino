@@ -4,6 +4,13 @@
 #include "Task.h"
 #include "Buzzer.h"
 
+// Imports for DisplayController SM
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSans12pt7b.h>
+
 // Global constants
 const int ITEM_ID = 18510;  // Room LB 451 - Brazil
 const int PIR_PIN = 13;     // GPIO pin connected to PIR sensor output
@@ -16,12 +23,14 @@ unsigned long nextReservationStarts;
 unsigned long currentTime;
 
 // Global task variables
-task tasks[3];
+const unsigned char TASKS_SIZE = 4;
+task tasks[TASKS_SIZE];
 const unsigned char tasksNum = sizeof(tasks) / sizeof(tasks[0]);
 const unsigned long tasksPeriodGCD = 100;
 const unsigned long periodServerSync = 100;
 const unsigned long periodReadOccupancy = 100;
 const unsigned long periodNotifyStudent = 1000;
+const unsigned long periodDisplayController = 500;
 
 task SS_task;
 task RO_task;
@@ -287,6 +296,89 @@ int TickFct_NotifyStudent(int state) {
   return state;
 }
 
+// DisplayController (DC) SM
+enum DC_States {
+  DC_SMStart,
+  DC_Init,
+  DC_Refresh,
+};
+
+int TickFct_DisplayController(int state) {
+  // Local constants
+  const unsigned char OLED_SDA = 21;
+  const unsigned char OLED_SCL = 22;
+  const unsigned char OLED_RST = 16;
+  const unsigned char SCREEN_WIDTH = 128;
+  const unsigned char SCREEN_HEIGHT = 64;
+
+  // Local variables
+  static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
+
+  // Transitions
+  switch (state) {
+    case DC_SMStart:
+      Serial.println("-> DC_Init");
+      state = DC_Init;  // Initial state
+      break;
+    case DC_Init:
+      Serial.println("-> DC_Refresh");
+      state = DC_Refresh;
+      break;
+    case DC_Refresh:
+      Serial.println("-> DC_Refresh");
+      state = DC_Refresh;
+      break;
+    default:
+      state = DC_SMStart;
+      break;
+  }
+
+  // Actions
+  switch (state) {
+    case DC_Init:
+      // Reset OLED via software
+      pinMode(OLED_RST, OUTPUT);
+      digitalWrite(OLED_RST, LOW);
+      delay(20);
+      digitalWrite(OLED_RST, HIGH);
+
+      // Init I2C on the OLED pins
+      Wire.begin(OLED_SDA, OLED_SCL);
+
+      // Initialize the SSD1306 at I2C addr 0x3C
+      // Try 0x3C first, if that fails try 0x3D
+      if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false, false)) {
+        Serial.println(F("SSD1306 at 0x3C failed, trying 0x3D"));
+        if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3D, false, false)) {
+          Serial.println(F("SSD1306 allocation failed"));
+        }
+      }
+      break;
+    case DC_Refresh:
+      display.clearDisplay();
+      display.setTextColor(SSD1306_WHITE);
+      display.setFont(&FreeSans9pt7b);
+      display.setCursor(0, 20);
+      if (currentlyReserved) {
+        display.print("Resv ends in\n");
+        display.print((currentReservationEnds - currentTime) / 60);
+        display.print(" mins");
+      } else if (nextReservationStarts > currentTime) {
+        display.print("Next resv in\n");
+        display.print((nextReservationStarts - currentTime) / 60);
+        display.print(" mins");
+      } else {
+        display.print("No upcoming\nreservations");
+      }
+      display.display();
+      break;
+    default:
+      break;
+  }
+
+  return state;
+}
+
 void TimerISRCode() {
   unsigned char i;
   for (i = 0; i < tasksNum; ++i) {
@@ -324,6 +416,13 @@ void setup() {
   tasks[i].period = periodNotifyStudent;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_NotifyStudent;
+
+  // DisplayController (DC) Setup
+  ++i;
+  tasks[i].state = DC_SMStart;
+  tasks[i].period = periodDisplayController;
+  tasks[i].elapsedTime = tasks[i].period;
+  tasks[i].TickFct = &TickFct_DisplayController;
 
   // TimerSet(tasksPeriodGCD);
   // TimerOn();
