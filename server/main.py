@@ -2,12 +2,16 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Header
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from fastapi_utils.tasks import repeat_every
 import httpx
 from datetime import timedelta, date
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+import os
 
 # Import the User model and routers
 from models import Unit, User, Room, populate_initial_rooms
@@ -15,6 +19,7 @@ import user_routes
 import auth_routes
 import room_routes
 import unit_routes
+import audio_routes
 
 
 # Not peristed in DB
@@ -133,6 +138,7 @@ app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(room_routes.router)
 app.include_router(unit_routes.router)
+app.include_router(audio_routes.router)
 
 
 @app.on_event("startup")
@@ -151,6 +157,38 @@ async def refresh_todays_slots_task():
 @app.get("/")
 async def root():
     return {"message": "FOMO Server is running!"}
+
+
+@app.get("/reservation-end-sound")
+async def get_my_sound():
+    """Serve the current audio file at the fixed URL /my-sound"""
+    audio_dir = Path("audio_files")
+
+    # Find the current sound file
+    current_files = list(audio_dir.glob("current_sound.*"))
+
+    if not current_files:
+        raise HTTPException(status_code=404, detail="No sound file found")
+
+    file_path = current_files[0]
+
+    # Determine media type based on file extension
+    media_type_map = {
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+    }
+
+    media_type = media_type_map.get(
+        file_path.suffix.lower(), "application/octet-stream"
+    )
+
+    return FileResponse(
+        path=str(file_path), media_type=media_type, filename=file_path.name
+    )
 
 
 @app.post("/sync")

@@ -48,6 +48,16 @@ export function Navigation() {
                 Manage Units
               </NavLink>
               <NavLink
+                to="/recordings"
+                className={({ isActive }) =>
+                  `text-sm font-medium transition-colors hover:text-primary ${
+                    isActive ? 'text-foreground' : 'text-muted-foreground'
+                  }`
+                }
+              >
+                Recordings
+              </NavLink>
+              <NavLink
                 to="/settings"
                 className={({ isActive }) =>
                   `text-sm font-medium transition-colors hover:text-primary ${

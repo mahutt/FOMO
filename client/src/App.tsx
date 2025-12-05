@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import About from './pages/About'
 import Settings from './pages/Settings'
 import Units from './pages/Units'
+import Recordings from './pages/Recordings'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="about" element={<About />} />
           <Route path="units" element={<Units />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="recordings" element={<Recordings />} />
         </Routes>
       </main>
     </div>

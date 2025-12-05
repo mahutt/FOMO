@@ -2,3 +2,7 @@ __pycache__/
 venv/
 
 database.db
+
+# Audio files (but keep the directory)
+audio_files/*
+!audio_files/.gitkeep
