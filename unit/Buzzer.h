@@ -116,23 +116,91 @@ Song notification = {
   114
 };
 
+int alarmMelody[] = {
+  NOTE_C4,4, NOTE_C4,4, NOTE_C4,4, NOTE_C4,4,
+  NOTE_C4,4, NOTE_C4,4, NOTE_C4,4, NOTE_C4,4,
+};
 
-void buzzerPlay(Song song) {
-  int notes = song.length / 2;
-  int wholenote = (60000 * 4) / song.tempo;
-  int divider = 0, noteDuration = 0;
-  for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
-    divider = song.melody[thisNote + 1];
-    if (divider > 0) {
-      noteDuration = (wholenote) / divider;
-    } else if (divider < 0) {
-      noteDuration = (wholenote) / abs(divider);
-      noteDuration *= 1.5;
-    }
-    tone(BUZZER, song.melody[thisNote], noteDuration * 0.9);
-    delay(noteDuration);
-    noTone(BUZZER);
+Song alarmSong = {
+  alarmMelody,
+  sizeof(alarmMelody) / sizeof(alarmMelody[0]),
+  200
+};
+
+struct BuzzerPlayer {
+  Song* currentSong;
+  bool playing;
+  bool finished;
+  int currentNote;
+  unsigned long noteStartTime;
+  int noteDuration;
+  int wholenote;
+
+  BuzzerPlayer() {
+    playing = false;
+    finished = true;
+    currentNote = 0;
+    noteStartTime = 0;
+    noteDuration = 0;
+    wholenote = 0;
   }
-}
+
+  void setSong(Song* song) {
+    currentSong = song;
+    currentNote = 0;
+    playing = false;
+    finished = false;
+    noteStartTime = 0;
+    noteDuration = 0;
+    wholenote = (60000 * 4) / currentSong->tempo;
+  }
+
+  void play() {
+    if (finished) {
+      currentNote = 0;
+      finished = false;
+    }
+    playing = true;
+    noteStartTime = millis();
+  }
+
+  void pause() {
+    playing = false;
+  }
+
+  void update() {
+    if (!playing || finished) {
+      return;
+    }
+
+    unsigned long currentTime = millis();
+
+    if (currentTime - noteStartTime >= noteDuration) {
+      noTone(BUZZER);
+      currentNote += 2;
+
+      if (currentNote >= currentSong->length) {
+        playing = false;
+        finished = true;
+        return;
+      }
+
+      int divider = currentSong->melody[currentNote + 1];
+      if (divider > 0) {
+        noteDuration = wholenote / divider;
+      } else if (divider < 0) {
+        noteDuration = wholenote / abs(divider);
+        noteDuration *= 1.5;
+      }
+
+      tone(BUZZER, currentSong->melody[currentNote], noteDuration * 0.9);
+      noteStartTime = currentTime;
+    }
+  }
+
+  bool isPlaying() {
+    return playing;
+  }
+};
 
 #endif

@@ -15,11 +15,12 @@
 const int PIR_PIN = 13;  // GPIO pin connected to PIR sensor output
 
 // Global variables
-unsigned char motionDetectedFlag;
+unsigned char motionDetectedSincePreviousSync;
+unsigned char motionDetectedSincePreviousTick;
 unsigned long roomId;
 String roomName;
 unsigned char currentlyReserved;
-unsigned char currentlyOpen;
+unsigned char currentlyOpen = 1;
 unsigned long currentReservationEnds;
 unsigned long nextReservationStarts;
 unsigned long currentTime;
@@ -31,7 +32,7 @@ const unsigned char tasksNum = sizeof(tasks) / sizeof(tasks[0]);
 const unsigned long tasksPeriodGCD = 100;
 const unsigned long periodServerSync = 100;
 const unsigned long periodReadOccupancy = 100;
-const unsigned long periodNotifyStudent = 1000;
+const unsigned long periodNotifyStudent = 200;
 const unsigned long periodDisplayController = 500;
 
 task SS_task;
@@ -135,7 +136,7 @@ int TickFct_ServerSync(int state) {
     case SS_ProcessReservationStatus:
       Serial.println("-> SS_RequestWait");
       state = SS_RequestWait;
-      motionDetectedFlag = 0;
+      motionDetectedSincePreviousSync = 0;
       waitCounter = 0;
       break;
     case SS_RequestWait:
@@ -173,9 +174,9 @@ int TickFct_ServerSync(int state) {
         Serial.println("FAILED TO CONNECT");
       }
       Serial.print("Motion detected: ");
-      Serial.println(motionDetectedFlag);
+      Serial.println(motionDetectedSincePreviousSync);
       client.print("POST /sync?occupied=");
-      client.print(motionDetectedFlag);
+      client.print(motionDetectedSincePreviousSync);
       client.print(" HTTP/1.1\r\nHost: ");
       client.print(host);
       client.print("\r\nX-Device-MAC: ");
@@ -220,8 +221,7 @@ int TickFct_ServerSync(int state) {
 enum RO_States {
   RO_SMStart,
   RO_Init,
-  RO_DetectMotion,
-  RO_Wait
+  RO_DetectMotion
 };
 
 int TickFct_ReadOccupancy(int state) {
@@ -236,20 +236,7 @@ int TickFct_ReadOccupancy(int state) {
       state = RO_DetectMotion;
       break;
     case RO_DetectMotion:
-      if (motionDetectedFlag) {
-        Serial.println("-> RO_Wait");
-        state = RO_Wait;
-      } else if (!motionDetectedFlag) {
-        state = RO_DetectMotion;
-      }
-      break;
-    case RO_Wait:
-      if (motionDetectedFlag) {
-        state = RO_Wait;
-      } else if (!motionDetectedFlag) {
-        Serial.println("-> RO_DetectMotion");
-        state = RO_DetectMotion;
-      }
+      state = RO_DetectMotion;
       break;
     default:
       Serial.println("-> RO_SMStart");
@@ -260,12 +247,14 @@ int TickFct_ReadOccupancy(int state) {
   // Actions
   switch (state) {
     case RO_Init:
-      motionDetectedFlag = 0;
+      motionDetectedSincePreviousSync = 0;
+      motionDetectedSincePreviousTick = 0;
       break;
     case RO_DetectMotion:
-      motionDetectedFlag = (digitalRead(PIR_PIN) == HIGH);
-      break;
-    case RO_Wait:
+      if (!motionDetectedSincePreviousSync) {
+        motionDetectedSincePreviousSync = (digitalRead(PIR_PIN) == HIGH);
+      }
+      motionDetectedSincePreviousTick = (digitalRead(PIR_PIN) == HIGH);
       break;
     default:
       break;
@@ -278,38 +267,56 @@ int TickFct_ReadOccupancy(int state) {
 // NotifyStudent (NS) SM
 enum NS_States {
   NS_SMStart,
-  NS_WaitThreshold,
-  NS_Notify,
-  NS_WaitEnd,
+  NS_Wait,
+  NS_NotifyIntruder,
+  NS_NotifyReservationEnd,
 };
 
 int TickFct_NotifyStudent(int state) {
   // Local constants
   static const short notificationLeadSeconds = 1500;  // 1500 seconds = 25 minutes
 
+  // Local variables
+  static BuzzerPlayer buzzerPlayer;
+
   // Transitions
   switch (state) {
     case NS_SMStart:
-      Serial.println("-> NS_WaitThreshold");
-      state = NS_WaitThreshold;  // Initial state
+      Serial.println("-> NS_Wait");
+      state = NS_Wait;  // Initial state
       break;
-    case NS_WaitThreshold:
-      if (currentlyReserved && (currentReservationEnds - currentTime) < notificationLeadSeconds) {
-        Serial.println("-> NS_Notify");
-        state = NS_Notify;
+    case NS_Wait:
+      if (!currentlyOpen && motionDetectedSincePreviousTick) {
+        Serial.println("-> NS_NotifyIntruder");
+        state = NS_NotifyIntruder;
+        buzzerPlayer.setSong(&alarmSong);
+        buzzerPlayer.play();
+      } else if (currentlyReserved && (currentReservationEnds - currentTime) < notificationLeadSeconds) {
+        Serial.println("-> NS_NotifyReservationEnd");
+        state = NS_NotifyReservationEnd;
+        buzzerPlayer.setSong(&notification);
+        buzzerPlayer.play();
       } else {
-        state = NS_WaitThreshold;
+        state = NS_Wait;
       }
       break;
-    case NS_Notify:
-      Serial.println("-> NS_WaitEnd");
-      state = NS_WaitEnd;
-      break;
-    case NS_WaitEnd:
-      if ((currentReservationEnds - currentTime) < notificationLeadSeconds) {
-        state = NS_WaitEnd;
+    case NS_NotifyIntruder:
+      if (!motionDetectedSincePreviousTick && !buzzerPlayer.isPlaying()) {
+        Serial.println("-> NS_Wait");
+        state = NS_Wait;
+      } else if (motionDetectedSincePreviousTick && !buzzerPlayer.isPlaying()) {
+        state = NS_NotifyIntruder;
+        buzzerPlayer.setSong(&alarmSong);
+        buzzerPlayer.play();
       } else {
-        state = NS_WaitThreshold;
+        state = NS_NotifyIntruder;
+      }
+      break;
+    case NS_NotifyReservationEnd:
+      if ((currentReservationEnds - currentTime) < notificationLeadSeconds || buzzerPlayer.isPlaying()) {
+        state = NS_NotifyReservationEnd;
+      } else {
+        state = NS_Wait;
       }
       break;
     default:
@@ -319,16 +326,18 @@ int TickFct_NotifyStudent(int state) {
 
   // Actions
   switch (state) {
-    case NS_WaitThreshold:
+    case NS_Wait:
       break;
-    case NS_Notify:
-      buzzerPlay(notification);
+    case NS_NotifyIntruder:
       break;
-    case NS_WaitEnd:
+    case NS_NotifyReservationEnd:
       break;
     default:
       break;
   }
+
+  // Update buzzer player (non-blocking)
+  buzzerPlayer.update();
 
   return state;
 }
@@ -395,7 +404,7 @@ int TickFct_DisplayController(int state) {
       display.setTextColor(SSD1306_WHITE);
       display.setFont(&FreeSans9pt7b);
       display.setCursor(0, 20);
-      if (!currentlyOpen && motionDetectedFlag) {
+      if (!currentlyOpen && motionDetectedSincePreviousSync) {
         display.setCursor(0, 20);
         display.print("INTRUDER!");
         display.setCursor(0, 40);
