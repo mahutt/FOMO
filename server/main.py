@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Header
 from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from fastapi_utils.tasks import repeat_every
@@ -10,7 +10,7 @@ from datetime import timedelta, date
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import the User model and routers
-from models import User, Room, populate_initial_rooms
+from models import Unit, User, Room, populate_initial_rooms
 import user_routes
 import auth_routes
 import room_routes
@@ -151,12 +151,36 @@ async def root():
     return {"message": "FOMO Server is running!"}
 
 
-@app.post("/sync/{room_id}")
+@app.post("/sync")
 async def sync(
-    room_id: str,
     session: SessionDep,
     occupied: int = Query(..., description="1 for occupied, 0 for unoccupied"),
+    x_device_mac: str = Header(..., alias="X-Device-MAC"),
 ) -> RoomStatus:
+
+    # Get room_id from device MAC address
+    statement = select(Unit).where(Unit.macAddress == x_device_mac)
+    unit = session.exec(statement).first()
+    if not unit:
+        # create unit and assign random valid room id
+        assigned_room = session.exec(select(Room)).first()
+        if not assigned_room:
+            raise HTTPException(status_code=404, detail="No rooms available to assign")
+        room_id = assigned_room.id
+        unit = Unit(
+            macAddress=x_device_mac,
+            roomId=room_id,
+        )
+        session.add(unit)
+        session.commit()
+        session.refresh(unit)
+    else:
+        unit.lastSync = datetime.now()
+        session.add(unit)
+        session.commit()
+        session.refresh(unit)
+        room_id = unit.roomId
+
     occupied_bool = occupied == 1
     now = datetime.now()
     item_id = int(room_id)
