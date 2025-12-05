@@ -20,6 +20,7 @@ import unit_routes
 # Not peristed in DB
 class RoomStatus(BaseModel):
     room_id: int
+    room_name: str
     current_time: int
     currently_reserved: bool
     current_reservation_ends: int | None = None
@@ -235,6 +236,7 @@ async def sync(
 
     return RoomStatus(
         room_id=item_id,
+        room_name=unit.room.name,
         current_time=int(now.timestamp()),
         currently_reserved=currently_reserved,
         current_reservation_ends=(
