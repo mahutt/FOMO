@@ -161,7 +161,7 @@ int TickFct_ServerSync(int state) {
           Serial.println(error.c_str());
         } else {
           roomId = doc["room_id"];
-          doc["room_name"].as<String>();
+          roomName = doc["room_name"].as<String>();
           currentlyReserved = doc["currently_reserved"];
           currentReservationEnds = doc["current_reservation_ends"];
           nextReservationStarts = doc["next_reservation_starts"];
@@ -362,16 +362,26 @@ int TickFct_DisplayController(int state) {
       display.setFont(&FreeSans9pt7b);
       display.setCursor(0, 20);
       if (currentlyReserved) {
-        display.print("Resv ends in\n");
+        display.setCursor(0, 20);
+        display.print("Resv ends in");
+        display.setCursor(0, 40);
         display.print((currentReservationEnds - currentTime) / 60);
         display.print(" mins");
       } else if (nextReservationStarts > currentTime) {
-        display.print("Next resv in\n");
+        display.setCursor(0, 20);
+        display.print("Next resv in");
+        display.setCursor(0, 40);
         display.print((nextReservationStarts - currentTime) / 60);
         display.print(" mins");
       } else {
-        display.print("No upcoming\nreservations");
+        display.setCursor(0, 20);
+        display.print("No upcoming");
+        display.setCursor(0, 40);
+        display.print("reservations");
       }
+      display.setCursor(0, 60);
+      display.print(">");
+      display.print(roomName);
       display.display();
       break;
     default:
