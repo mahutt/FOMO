@@ -23,6 +23,7 @@ class RoomStatus(BaseModel):
     room_name: str
     current_time: int
     currently_reserved: bool
+    currently_open: bool
     current_reservation_ends: int | None = None
     next_reservation_starts: int | None = None
 
@@ -239,6 +240,7 @@ async def sync(
         room_name=unit.room.name,
         current_time=int(now.timestamp()),
         currently_reserved=currently_reserved,
+        currently_open=is_currently_open(now),
         current_reservation_ends=(
             int(end.timestamp()) if currently_reserved else None
         ),  # temporary
@@ -478,6 +480,38 @@ class RoomStats(BaseModel):
 
 EARLIEST_RESERVATION_HOURS = 8
 LATEST_RESERVATION_HOURS = 23
+
+
+def is_currently_open(dt: datetime = None) -> bool:
+    """Check if study rooms are currently open (8 AM to 11 PM)"""
+    if dt is None:
+        dt = datetime.now()
+    return EARLIEST_RESERVATION_HOURS <= dt.hour < LATEST_RESERVATION_HOURS
+
+
+def get_next_opening_time(dt: datetime = None) -> datetime:
+    """Get the next opening time (8 AM) after the given datetime"""
+    if dt is None:
+        dt = datetime.now()
+
+    if dt.hour < EARLIEST_RESERVATION_HOURS:
+        # Same day at 8 AM
+        return dt.replace(
+            hour=EARLIEST_RESERVATION_HOURS, minute=0, second=0, microsecond=0
+        )
+    else:
+        # Next day at 8 AM
+        next_day = dt.replace(
+            hour=EARLIEST_RESERVATION_HOURS, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+        return next_day
+
+
+def get_closing_time(dt: datetime = None) -> datetime:
+    """Get the closing time (11 PM) for the given datetime's date"""
+    if dt is None:
+        dt = datetime.now()
+    return dt.replace(hour=LATEST_RESERVATION_HOURS, minute=0, second=0, microsecond=0)
 
 
 @app.get("/stats/{room_id}")
