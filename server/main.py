@@ -14,6 +14,7 @@ from models import User, Room, populate_initial_rooms
 import user_routes
 import auth_routes
 import room_routes
+import unit_routes
 
 
 # Not peristed in DB
@@ -129,6 +130,7 @@ app.add_middleware(
 app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(room_routes.router)
+app.include_router(unit_routes.router)
 
 
 @app.on_event("startup")

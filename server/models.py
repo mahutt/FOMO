@@ -1,6 +1,7 @@
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, select, Relationship
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime, timezone
 
 
 class UserType(str, Enum):
@@ -20,6 +21,20 @@ class Room(SQLModel, table=True):
     name: str
     code: str
     building: str
+
+    # Relationship to units (1-to-many)
+    units: List["Unit"] = Relationship(back_populates="room")
+
+
+class Unit(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    macAddress: str = Field(index=True)
+    roomId: int = Field(foreign_key="room.id")
+    createdAt: datetime = Field(default_factory=lambda: datetime.now())
+    lastSync: datetime = Field(default_factory=lambda: datetime.now())
+
+    # Relationship to room (many-to-1)
+    room: Room = Relationship(back_populates="units")
 
 
 # Populate functions
