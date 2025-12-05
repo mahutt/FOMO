@@ -10,9 +10,10 @@ from datetime import timedelta, date
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import the User model and routers
-from models import User
+from models import User, Room, populate_initial_rooms
 import user_routes
 import auth_routes
+import room_routes
 
 
 # Not peristed in DB
@@ -127,6 +128,7 @@ app.add_middleware(
 # Include routers
 app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
+app.include_router(room_routes.router)
 
 
 @app.on_event("startup")
@@ -139,6 +141,7 @@ def on_startup():
 async def refresh_todays_slots_task():
     with Session(engine) as session:
         await refresh_todays_slots(session)
+        await populate_initial_rooms(session)
 
 
 @app.get("/")
