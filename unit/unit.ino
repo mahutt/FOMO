@@ -328,8 +328,7 @@ int TickFct_NotifyStudent(int state) {
       } else if (currentlyReserved && (currentReservationEnds - currentTime) < notificationLeadSeconds) {
         Serial.println("-> NS_NotifyReservationEnd");
         state = NS_NotifyReservationEnd;
-        buzzerPlayer.setSong(&notification);
-        buzzerPlayer.play();
+        blockingBuzzerPlay(notification);
         player.setIndex(0);
         player.play();
       } else {

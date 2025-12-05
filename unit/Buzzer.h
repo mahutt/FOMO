@@ -102,12 +102,17 @@
 
 struct Song {
   const int* melody;
-  int length;  
+  int length;
   int tempo;
 };
 
 int notificationMelody[] = {
-  NOTE_D6, 8, NOTE_C6, 8, NOTE_A5, 4,
+  NOTE_D6,
+  8,
+  NOTE_C6,
+  8,
+  NOTE_A5,
+  4,
 };
 
 Song notification = {
@@ -117,8 +122,22 @@ Song notification = {
 };
 
 int alarmMelody[] = {
-  NOTE_C4,4, NOTE_C4,4, NOTE_C4,4, NOTE_C4,4,
-  NOTE_C4,4, NOTE_C4,4, NOTE_C4,4, NOTE_C4,4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
+  NOTE_C4,
+  4,
 };
 
 Song alarmSong = {
@@ -202,5 +221,24 @@ struct BuzzerPlayer {
     return playing;
   }
 };
+
+void blockingBuzzerPlay(Song song) {
+  int notes = song.length / 2;
+  int wholenote = (60000 * 4) / song.tempo;
+  int divider = 0, noteDuration = 0;
+  for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
+    divider = song.melody[thisNote + 1];
+    if (divider > 0) {
+      noteDuration = (wholenote) / divider;
+    } else if (divider < 0) {
+      noteDuration = (wholenote) / abs(divider);
+      noteDuration *= 1.5;
+    }
+    tone(BUZZER, song.melody[thisNote], noteDuration * 0.9);
+    delay(noteDuration);
+    noTone(BUZZER);
+  }
+}
+
 
 #endif
