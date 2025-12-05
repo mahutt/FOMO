@@ -48,10 +48,10 @@ enum SS_States {
 
 int TickFct_ServerSync(int state) {
   // Local constants
-  const char* ssid = "sfctommy";
-  const char* password = "fomopass";
-  const char* host = "335guy.com";
-  const unsigned short httpsPort = 443;
+  static const char* ssid = "sfctommy";
+  static const char* password = "fomopass";
+  static const char* host = "335guy.com";
+  static const unsigned short httpsPort = 443;
 
   // Local variables
   static WiFiClientSecure client;
@@ -242,7 +242,7 @@ enum NS_States {
 
 int TickFct_NotifyStudent(int state) {
   // Local constants
-  const short notificationLeadSeconds = 1500;  // 1500 seconds = 25 minutes
+  static const short notificationLeadSeconds = 1500;  // 1500 seconds = 25 minutes
 
   // Transitions
   switch (state) {
@@ -299,11 +299,11 @@ enum DC_States {
 
 int TickFct_DisplayController(int state) {
   // Local constants
-  const unsigned char OLED_SDA = 21;
-  const unsigned char OLED_SCL = 22;
-  const unsigned char OLED_RST = 16;
-  const unsigned char SCREEN_WIDTH = 128;
-  const unsigned char SCREEN_HEIGHT = 64;
+  static const unsigned char OLED_SDA = 21;
+  static const unsigned char OLED_SCL = 22;
+  static const unsigned char OLED_RST = 16;
+  static const unsigned char SCREEN_WIDTH = 128;
+  static const unsigned char SCREEN_HEIGHT = 64;
 
   // Local variables
   static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
