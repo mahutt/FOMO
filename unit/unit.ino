@@ -73,7 +73,6 @@ int TickFct_ServerSync(int state) {
         state = SS_SyncStart;
         client.setInsecure();
       } else if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("-> SS_WaitWifi");
         state = SS_WaitWifi;
       }
       break;
@@ -88,12 +87,10 @@ int TickFct_ServerSync(int state) {
           Serial.println("-> SS_ProcessReservationStatus");
           state = SS_ProcessReservationStatus;
         } else {
-          Serial.println("-> SS_SyncWait");
           state = SS_SyncWait;
         }
       } else if (client.connected() && !client.available()) {
         Serial.println("Connected but no data available...");
-        Serial.println("-> SS_SyncWait");
         state = SS_SyncWait;
       } else if (!client.connected()) {
         Serial.println("-> SS_SyncStart");
@@ -111,7 +108,6 @@ int TickFct_ServerSync(int state) {
         Serial.println("-> SS_SyncStart");
         state = SS_SyncStart;
       } else if (waitCounter < 600) {
-        Serial.println("-> SS_RequestWait");
         state = SS_RequestWait;
         waitCounter++;
       }
@@ -201,13 +197,11 @@ int TickFct_ReadOccupancy(int state) {
         Serial.println("-> RO_Wait");
         state = RO_Wait;
       } else if (!motionDetectedFlag) {
-        Serial.println("-> RO_DetectMotion");
         state = RO_DetectMotion;
       }
       break;
     case RO_Wait:
       if (motionDetectedFlag) {
-        Serial.println("-> RO_Wait");
         state = RO_Wait;
       } else if (!motionDetectedFlag) {
         Serial.println("-> RO_DetectMotion");
@@ -261,7 +255,6 @@ int TickFct_NotifyStudent(int state) {
         Serial.println("-> NS_Notify");
         state = NS_Notify;
       } else {
-        Serial.println("-> NS_WaitThreshold");
         state = NS_WaitThreshold;
       }
       break;
@@ -271,7 +264,6 @@ int TickFct_NotifyStudent(int state) {
       break;
     case NS_WaitEnd:
       if ((currentReservationEnds - currentTime) < notificationLeadSeconds) {
-        Serial.println("-> NS_WaitEnd");
         state = NS_WaitEnd;
       } else {
         state = NS_WaitThreshold;
@@ -327,7 +319,6 @@ int TickFct_DisplayController(int state) {
       state = DC_Refresh;
       break;
     case DC_Refresh:
-      Serial.println("-> DC_Refresh");
       state = DC_Refresh;
       break;
     default:
