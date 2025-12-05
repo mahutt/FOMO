@@ -4,6 +4,12 @@
 #include "Task.h"
 #include "Buzzer.h"
 
+// Imports for NotifyStudent SM
+#include "AudioTools.h"
+#include "AudioTools/AudioCodecs/CodecMP3Helix.h"
+#include "AudioTools/Disk/AudioSourceURL.h"
+#include "AudioTools/Communication/AudioHttp.h"
+
 // Imports for DisplayController SM
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -12,9 +18,12 @@
 #include <Fonts/FreeSans12pt7b.h>
 
 // Global constants
+const char* WIFI_SSID = "sfctommy";
+const char* WIFI_PASSWORD = "fomopass";
+
 const int PIR_PIN = 13;  // GPIO pin connected to PIR sensor output
 const int ALARM_LIGHT_PIN = 2;
-const int MOTION_LIGHT_PIN = 23;
+const int MOTION_LIGHT_PIN = 4;
 
 // Global variables
 unsigned char motionDetectedSincePreviousSync;
@@ -27,6 +36,16 @@ unsigned long currentReservationEnds;
 unsigned long nextReservationStarts;
 unsigned long currentTime;
 
+// These variables are specific to the NS SM, but had to be made global due to restrictions of the arduino-audio-tools library
+const char* urls[] = {
+  "https://335guy.com/reservation-end-sound",
+};
+static URLStream urlStream(WIFI_SSID, WIFI_PASSWORD);
+static AudioSourceURL source(urlStream, urls, "audio/mp3");
+static I2SStream i2s;
+static MP3DecoderHelix decoder;
+static AudioPlayer player(source, i2s, decoder);
+
 // Global task variables
 const unsigned char TASKS_SIZE = 4;
 task tasks[TASKS_SIZE];
@@ -36,6 +55,9 @@ const unsigned long periodServerSync = 100;
 const unsigned long periodReadOccupancy = 100;
 const unsigned long periodNotifyStudent = 200;
 const unsigned long periodDisplayController = 500;
+
+// Non-blocking timing variables
+unsigned long lastTaskUpdate = 0;
 
 task SS_task;
 task RO_task;
@@ -85,8 +107,6 @@ int TickFct_ServerSync(int state) {
     "mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\n"
     "emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n"
     "-----END CERTIFICATE-----\n";
-  static const char* ssid = "sfctommy";
-  static const char* password = "fomopass";
   static const char* host = "335guy.com";
   static const unsigned short httpsPort = 443;
 
@@ -164,7 +184,7 @@ int TickFct_ServerSync(int state) {
   // Actions
   switch (state) {
     case SS_Init:
-      WiFi.begin(ssid, password);
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
       fomoUnitIdentifier = WiFi.macAddress();
       break;
     case SS_WaitWifi:
@@ -275,6 +295,7 @@ int TickFct_ReadOccupancy(int state) {
 // NotifyStudent (NS) SM
 enum NS_States {
   NS_SMStart,
+  NS_Init,
   NS_Wait,
   NS_NotifyIntruder,
   NS_NotifyReservationEnd,
@@ -290,8 +311,12 @@ int TickFct_NotifyStudent(int state) {
   // Transitions
   switch (state) {
     case NS_SMStart:
+      Serial.println("-> NS_Init");
+      state = NS_Init;  // Initial state
+      break;
+    case NS_Init:
       Serial.println("-> NS_Wait");
-      state = NS_Wait;  // Initial state
+      state = NS_Wait;
       break;
     case NS_Wait:
       if (!currentlyOpen && motionDetectedSincePreviousTick) {
@@ -305,6 +330,8 @@ int TickFct_NotifyStudent(int state) {
         state = NS_NotifyReservationEnd;
         buzzerPlayer.setSong(&notification);
         buzzerPlayer.play();
+        player.setIndex(0);
+        player.play();
       } else {
         state = NS_Wait;
       }
@@ -336,6 +363,17 @@ int TickFct_NotifyStudent(int state) {
 
   // Actions
   switch (state) {
+    case NS_Init:
+      {
+        auto cfg = i2s.defaultConfig(TX_MODE);
+        cfg.pin_bck = 14;
+        cfg.pin_ws = 15;
+        cfg.pin_data = 23;
+        i2s.begin(cfg);
+        player.begin();
+        player.setAutoNext(false);
+      }
+      break;
     case NS_Wait:
       break;
     case NS_NotifyIntruder:
@@ -462,6 +500,8 @@ void TimerISRCode() {
 
 void setup() {
   Serial.begin(115200);
+  AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Warning);
+
   pinMode(PIR_PIN, INPUT);
   pinMode(ALARM_LIGHT_PIN, OUTPUT);
   pinMode(MOTION_LIGHT_PIN, OUTPUT);
@@ -501,6 +541,12 @@ void setup() {
 }
 
 void loop() {
-  TimerISRCode();
-  delay(tasksPeriodGCD);
+  player.copy();
+  
+  // Non-blocking timing check
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastTaskUpdate >= tasksPeriodGCD) {
+    TimerISRCode();
+    lastTaskUpdate = currentMillis;
+  }
 }
