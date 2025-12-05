@@ -19,6 +19,7 @@ unsigned char motionDetectedFlag;
 unsigned long roomId;
 String roomName;
 unsigned char currentlyReserved;
+unsigned char currentlyOpen;
 unsigned long currentReservationEnds;
 unsigned long nextReservationStarts;
 unsigned long currentTime;
@@ -195,6 +196,7 @@ int TickFct_ServerSync(int state) {
           roomId = doc["room_id"];
           roomName = doc["room_name"].as<String>();
           currentlyReserved = doc["currently_reserved"];
+          currentlyOpen = doc["currently_open"];
           currentReservationEnds = doc["current_reservation_ends"];
           nextReservationStarts = doc["next_reservation_starts"];
           currentTime = doc["current_time"];
@@ -393,7 +395,12 @@ int TickFct_DisplayController(int state) {
       display.setTextColor(SSD1306_WHITE);
       display.setFont(&FreeSans9pt7b);
       display.setCursor(0, 20);
-      if (currentlyReserved) {
+      if (!currentlyOpen && motionDetectedFlag) {
+        display.setCursor(0, 20);
+        display.print("INTRUDER!");
+        display.setCursor(0, 40);
+        display.print("GET OUT!");
+      } else if (currentlyReserved) {
         display.setCursor(0, 20);
         display.print("Resv ends in");
         display.setCursor(0, 40);
