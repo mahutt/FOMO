@@ -476,6 +476,7 @@ class RoomStats(BaseModel):
     occupiedPercentage: int
     ghostReservations: int
     averageStudySessionDuration: int
+    intruders: int
 
 
 EARLIEST_RESERVATION_HOURS = 8
@@ -578,9 +579,20 @@ async def get_occupancy_logs(
         logs, occupancy_window
     )
 
+    # Count the number of intruders (occupied logs during unreserved times between 11 PM and 8 AM)
+    intruders = 0
+    for log in logs:
+        if log.occupied:
+            if (
+                log.timestamp.hour < EARLIEST_RESERVATION_HOURS
+                or log.timestamp.hour >= LATEST_RESERVATION_HOURS
+            ):
+                intruders += 1
+
     return RoomStats(
         reservedPercentage=int(reserved_percentage),
         occupiedPercentage=int(occupied_percentage),
         ghostReservations=ghost_reservations,
         averageStudySessionDuration=average_study_session_duration,
+        intruders=intruders,
     )
