@@ -12,11 +12,12 @@
 #include <Fonts/FreeSans12pt7b.h>
 
 // Global constants
-const int ITEM_ID = 18510;  // Room LB 451 - Brazil
-const int PIR_PIN = 13;     // GPIO pin connected to PIR sensor output
+const int PIR_PIN = 13;  // GPIO pin connected to PIR sensor output
 
 // Global variables
 unsigned char motionDetectedFlag;
+unsigned long roomId;
+String roomName;
 unsigned char currentlyReserved;
 unsigned long currentReservationEnds;
 unsigned long nextReservationStarts;
@@ -56,6 +57,7 @@ int TickFct_ServerSync(int state) {
   // Local variables
   static WiFiClientSecure client;
   static unsigned short waitCounter;
+  static String fomoUnitIdentifier;
 
   // Transitions
   switch (state) {
@@ -127,6 +129,7 @@ int TickFct_ServerSync(int state) {
   switch (state) {
     case SS_Init:
       WiFi.begin(ssid, password);
+      fomoUnitIdentifier = WiFi.macAddress();
       break;
     case SS_WaitWifi:
       break;
@@ -138,12 +141,12 @@ int TickFct_ServerSync(int state) {
       }
       Serial.print("Motion detected: ");
       Serial.println(motionDetectedFlag);
-      client.print("POST /sync/");
-      client.print(ITEM_ID);
-      client.print("?occupied=");
+      client.print("POST /sync?occupied=");
       client.print(motionDetectedFlag);
       client.print(" HTTP/1.1\r\nHost: ");
       client.print(host);
+      client.print("\r\nX-Device-MAC: ");
+      client.print(fomoUnitIdentifier);
       client.print("\r\nConnection: close\r\n\r\n");
       break;
     case SS_SyncWait:
@@ -157,7 +160,8 @@ int TickFct_ServerSync(int state) {
           Serial.print("JSON parsing failed: ");
           Serial.println(error.c_str());
         } else {
-          // long room_id = doc["room_id"]; // TODO: make it possible to re-assign associated room remotely
+          roomId = doc["room_id"];
+          doc["room_name"].as<String>();
           currentlyReserved = doc["currently_reserved"];
           currentReservationEnds = doc["current_reservation_ends"];
           nextReservationStarts = doc["next_reservation_starts"];
