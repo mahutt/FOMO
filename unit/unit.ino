@@ -13,6 +13,8 @@
 
 // Global constants
 const int PIR_PIN = 13;  // GPIO pin connected to PIR sensor output
+const int ALARM_LIGHT_PIN = 2;
+const int MOTION_LIGHT_PIN = 23;
 
 // Global variables
 unsigned char motionDetectedSincePreviousSync;
@@ -249,12 +251,18 @@ int TickFct_ReadOccupancy(int state) {
     case RO_Init:
       motionDetectedSincePreviousSync = 0;
       motionDetectedSincePreviousTick = 0;
+      digitalWrite(MOTION_LIGHT_PIN, LOW);
       break;
     case RO_DetectMotion:
       if (!motionDetectedSincePreviousSync) {
         motionDetectedSincePreviousSync = (digitalRead(PIR_PIN) == HIGH);
       }
       motionDetectedSincePreviousTick = (digitalRead(PIR_PIN) == HIGH);
+      if (motionDetectedSincePreviousTick) {
+        digitalWrite(MOTION_LIGHT_PIN, HIGH);
+      } else {
+        digitalWrite(MOTION_LIGHT_PIN, LOW);
+      }
       break;
     default:
       break;
@@ -291,6 +299,7 @@ int TickFct_NotifyStudent(int state) {
         state = NS_NotifyIntruder;
         buzzerPlayer.setSong(&alarmSong);
         buzzerPlayer.play();
+        digitalWrite(ALARM_LIGHT_PIN, HIGH);
       } else if (currentlyReserved && (currentReservationEnds - currentTime) < notificationLeadSeconds) {
         Serial.println("-> NS_NotifyReservationEnd");
         state = NS_NotifyReservationEnd;
@@ -304,6 +313,7 @@ int TickFct_NotifyStudent(int state) {
       if (!motionDetectedSincePreviousTick && !buzzerPlayer.isPlaying()) {
         Serial.println("-> NS_Wait");
         state = NS_Wait;
+        digitalWrite(ALARM_LIGHT_PIN, LOW);
       } else if (motionDetectedSincePreviousTick && !buzzerPlayer.isPlaying()) {
         state = NS_NotifyIntruder;
         buzzerPlayer.setSong(&alarmSong);
@@ -453,6 +463,8 @@ void TimerISRCode() {
 void setup() {
   Serial.begin(115200);
   pinMode(PIR_PIN, INPUT);
+  pinMode(ALARM_LIGHT_PIN, OUTPUT);
+  pinMode(MOTION_LIGHT_PIN, OUTPUT);
   delay(1000);
 
   // SM Setup
