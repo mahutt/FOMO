@@ -28,6 +28,165 @@ interface RecordingState {
   fileExtension?: string
 }
 
+// MP3 Recorder class using lame.js
+class MP3Recorder {
+  private context: AudioContext | null = null
+  private microphone: MediaStreamAudioSourceNode | null = null
+  private processor: ScriptProcessorNode | null = null
+  private worker: Worker | null = null
+  private stream: MediaStream | null = null
+  private config: { bitRate: number; sampleRate?: number }
+
+  constructor(config: { bitRate: number; sampleRate?: number }) {
+    this.config = config
+  }
+
+  initialize() {
+    this.context = new (window.AudioContext ||
+      (window as any).webkitAudioContext)()
+    this.config.sampleRate = this.context.sampleRate
+    this.worker = new Worker('/mp3-worker.js')
+    this.worker.postMessage({ cmd: 'init', config: this.config })
+  }
+
+  start(onSuccess?: () => void, onError?: (error: any) => void) {
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      .then((stream) => {
+        this.stream = stream
+        this.beginRecording(stream)
+        if (onSuccess) onSuccess()
+      })
+      .catch((error) => {
+        if (onError) onError(error)
+      })
+  }
+
+  private beginRecording(stream: MediaStream) {
+    if (!this.context || !this.worker) return
+
+    this.microphone = this.context.createMediaStreamSource(stream)
+    this.processor = this.context.createScriptProcessor(4096, 1, 1)
+
+    this.processor.onaudioprocess = (event) => {
+      const array = event.inputBuffer.getChannelData(0)
+      this.worker?.postMessage({ cmd: 'encode', buf: array })
+    }
+
+    this.microphone.connect(this.processor)
+    this.processor.connect(this.context.destination)
+  }
+
+  stop() {
+    if (this.processor && this.microphone) {
+      this.microphone.disconnect()
+      this.processor.disconnect()
+      this.processor.onaudioprocess = null
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => track.stop())
+    }
+  }
+
+  getMp3Blob(onSuccess: (blob: Blob) => void, onError?: (error: any) => void) {
+    if (!this.worker) {
+      if (onError) onError('Worker not initialized')
+      return
+    }
+
+    this.worker.onmessage = (e) => {
+      switch (e.data.cmd) {
+        case 'end':
+          onSuccess(new Blob(e.data.buf, { type: 'audio/mp3' }))
+          break
+        case 'error':
+          if (onError) onError(e.data.error)
+          break
+      }
+    }
+
+    this.worker.postMessage({ cmd: 'finish' })
+  }
+
+  cleanup() {
+    this.stop()
+    if (this.worker) {
+      this.worker.terminate()
+      this.worker = null
+    }
+    if (this.context) {
+      this.context.close()
+      this.context = null
+    }
+  }
+}
+
+// Utility function to convert any audio file to MP3
+const convertAudioFileToMP3 = (file: File): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const audioContext = new (window.AudioContext ||
+      (window as any).webkitAudioContext)()
+    const reader = new FileReader()
+
+    reader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target?.result as ArrayBuffer
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+        // Create a worker for MP3 encoding
+        const worker = new Worker('/mp3-worker.js')
+        worker.postMessage({
+          cmd: 'init',
+          config: {
+            bitRate: 128,
+            sampleRate: audioBuffer.sampleRate,
+          },
+        })
+
+        // Get audio data and encode to MP3
+        const channelData = audioBuffer.getChannelData(0)
+        const sampleBlockSize = 1152
+
+        // Process audio in chunks
+        for (let i = 0; i < channelData.length; i += sampleBlockSize) {
+          const chunk = channelData.slice(i, i + sampleBlockSize)
+          worker.postMessage({ cmd: 'encode', buf: chunk })
+        }
+
+        worker.onmessage = (e) => {
+          if (e.data.cmd === 'end') {
+            const mp3Blob = new Blob(e.data.buf, { type: 'audio/mp3' })
+            worker.terminate()
+            audioContext.close()
+            resolve(mp3Blob)
+          } else if (e.data.cmd === 'error') {
+            worker.terminate()
+            audioContext.close()
+            reject(new Error(e.data.error))
+          }
+        }
+
+        worker.postMessage({ cmd: 'finish' })
+      } catch (error) {
+        audioContext.close()
+        reject(error)
+      }
+    }
+
+    reader.onerror = () => {
+      reject(new Error('Failed to read file'))
+    }
+
+    reader.readAsArrayBuffer(file)
+  })
+}
+
 export default function Recordings() {
   const { isAdmin } = useAuth()
   const [soundInfo, setSoundInfo] = useState<SoundInfo | null>(null)
@@ -49,9 +208,7 @@ export default function Recordings() {
   const [recordingPermission, setRecordingPermission] = useState<
     boolean | null
   >(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const mp3RecorderRef = useRef<MP3Recorder | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchCurrentSound = useCallback(async () => {
@@ -91,10 +248,14 @@ export default function Recordings() {
     setUploadError(null)
     setUploadSuccess(null)
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
+      // Convert the file to MP3 first
+      const mp3Blob = await convertAudioFileToMP3(file)
+
+      const formData = new FormData()
+      const mp3Filename = file.name.replace(/\.[^/.]+$/, '') + '.mp3'
+      formData.append('file', mp3Blob, mp3Filename)
+
       const response = await fetch(`${SERVER_URL}/audio/upload`, {
         method: 'POST',
         body: formData,
@@ -103,7 +264,9 @@ export default function Recordings() {
       const data = await response.json()
 
       if (response.ok) {
-        setUploadSuccess(`Successfully uploaded ${file.name}`)
+        setUploadSuccess(
+          `Successfully uploaded ${file.name} (converted to MP3)`
+        )
         await fetchCurrentSound() // Refresh the current sound info
         if (fileInputRef.current) {
           fileInputRef.current.value = '' // Clear the input
@@ -112,7 +275,11 @@ export default function Recordings() {
         setUploadError(data.detail || 'Upload failed')
       }
     } catch (error) {
-      setUploadError('Network error occurred during upload')
+      if (error instanceof Error && error.message.includes('decode')) {
+        setUploadError('Unsupported audio format. Please try a different file.')
+      } else {
+        setUploadError('Failed to process audio file. Please try again.')
+      }
       console.error('Upload error:', error)
     } finally {
       setIsUploading(false)
@@ -176,73 +343,34 @@ export default function Recordings() {
   // Start recording
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+      // Initialize MP3 recorder
+      const recorder = new MP3Recorder({ bitRate: 128 })
+      recorder.initialize()
+      mp3RecorderRef.current = recorder
+
+      recorder.start(
+        () => {
+          // Success callback
+          setRecording((prev) => ({
+            ...prev,
+            isRecording: true,
+            duration: 0,
+            fileExtension: '.mp3',
+          }))
+
+          // Start timer
+          timerRef.current = setInterval(() => {
+            setRecording((prev) => ({ ...prev, duration: prev.duration + 1 }))
+          }, 1000)
         },
-      })
-
-      streamRef.current = stream
-      chunksRef.current = []
-
-      // Try different audio formats that are more likely to be supported by the server
-      let mimeType = 'audio/webm;codecs=opus'
-      let fileExtension = '.ogg'
-
-      if (MediaRecorder.isTypeSupported('audio/wav')) {
-        mimeType = 'audio/wav'
-        fileExtension = '.wav'
-      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
-        mimeType = 'audio/ogg;codecs=opus'
-        fileExtension = '.ogg'
-      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        mimeType = 'audio/webm;codecs=opus'
-        fileExtension = '.ogg' // We'll treat webm as ogg for server compatibility
-      } else {
-        mimeType = 'audio/webm'
-        fileExtension = '.ogg'
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType })
-
-      mediaRecorderRef.current = mediaRecorder
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
+        (error) => {
+          // Error callback
+          console.error('Failed to start recording:', error)
+          setUploadError(
+            'Failed to access microphone. Please check permissions.'
+          )
         }
-      }
-
-      mediaRecorder.onstop = () => {
-        // Create blob with appropriate MIME type for server compatibility
-        const blob = new Blob(chunksRef.current, {
-          type: mimeType.includes('webm') ? 'audio/ogg' : mimeType,
-        })
-        const url = URL.createObjectURL(blob)
-
-        setRecording((prev) => ({
-          ...prev,
-          recordingBlob: blob,
-          recordingUrl: url,
-          isRecording: false,
-          isPaused: false,
-          fileExtension, // Store the extension for later use
-        }))
-
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((track) => track.stop())
-        }
-      }
-
-      mediaRecorder.start(100) // Collect data every 100ms
-      setRecording((prev) => ({ ...prev, isRecording: true, duration: 0 }))
-
-      // Start timer
-      timerRef.current = setInterval(() => {
-        setRecording((prev) => ({ ...prev, duration: prev.duration + 1 }))
-      }, 1000)
+      )
     } catch (error) {
       console.error('Failed to start recording:', error)
       setUploadError('Failed to access microphone. Please check permissions.')
@@ -251,11 +379,27 @@ export default function Recordings() {
 
   // Stop recording
   const stopRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === 'recording'
-    ) {
-      mediaRecorderRef.current.stop()
+    if (mp3RecorderRef.current) {
+      mp3RecorderRef.current.stop()
+
+      // Get MP3 blob
+      mp3RecorderRef.current.getMp3Blob(
+        (blob) => {
+          const url = URL.createObjectURL(blob)
+          setRecording((prev) => ({
+            ...prev,
+            recordingBlob: blob,
+            recordingUrl: url,
+            isRecording: false,
+            isPaused: false,
+            fileExtension: '.mp3',
+          }))
+        },
+        (error) => {
+          console.error('Failed to get MP3 blob:', error)
+          setUploadError('Failed to process recording. Please try again.')
+        }
+      )
     }
 
     if (timerRef.current) {
@@ -268,6 +412,11 @@ export default function Recordings() {
   const discardRecording = () => {
     if (recording.recordingUrl) {
       URL.revokeObjectURL(recording.recordingUrl)
+    }
+
+    if (mp3RecorderRef.current) {
+      mp3RecorderRef.current.cleanup()
+      mp3RecorderRef.current = null
     }
 
     setRecording({
@@ -294,7 +443,7 @@ export default function Recordings() {
     setUploadSuccess(null)
 
     const formData = new FormData()
-    const extension = recording.fileExtension || '.ogg'
+    const extension = '.mp3' // Always MP3 now
     const filename = `recording-${new Date()
       .toISOString()
       .replace(/[:.]/g, '-')}${extension}`
@@ -309,7 +458,7 @@ export default function Recordings() {
       const data = await response.json()
 
       if (response.ok) {
-        setUploadSuccess(`Successfully uploaded recording`)
+        setUploadSuccess(`Successfully uploaded MP3 recording`)
         await fetchCurrentSound()
         discardRecording() // Clear the recording
       } else {
@@ -336,8 +485,8 @@ export default function Recordings() {
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+      if (mp3RecorderRef.current) {
+        mp3RecorderRef.current.cleanup()
       }
       if (recording.recordingUrl) {
         URL.revokeObjectURL(recording.recordingUrl)
@@ -447,12 +596,14 @@ export default function Recordings() {
             <CardTitle>Upload New Sound</CardTitle>
             <CardDescription>
               Replace the current notification sound with a new audio file
+              (automatically converted to MP3)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Supported formats: MP3, WAV, OGG, M4A, AAC, FLAC
+                Supported formats: MP3, WAV, OGG, M4A, AAC, FLAC (all converted
+                to MP3)
               </p>
               <input
                 ref={fileInputRef}
@@ -474,12 +625,13 @@ export default function Recordings() {
               <div className="flex items-center justify-center py-4">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                 <span className="ml-2 text-sm text-muted-foreground">
-                  Uploading...
+                  Converting to MP3 and uploading...
                 </span>
               </div>
             )}
 
             <div className="text-xs text-muted-foreground">
+              <p>• Files are automatically converted to MP3 before upload</p>
               <p>• Uploading a new file will replace the current sound</p>
               <p>• The sound will be available immediately at /my-sound</p>
               <p>• All connected units will use the new sound</p>
@@ -548,7 +700,7 @@ export default function Recordings() {
                   <div className="space-y-4">
                     <div className="text-center">
                       <Badge variant="outline">
-                        Recorded: {formatDuration(recording.duration)}
+                        MP3 Recording: {formatDuration(recording.duration)}
                       </Badge>
                     </div>
 
@@ -593,6 +745,7 @@ export default function Recordings() {
                 <div className="text-xs text-muted-foreground">
                   <p>• Click "Start Recording" to begin</p>
                   <p>• Click "Stop Recording" when finished</p>
+                  <p>• Recordings are automatically converted to MP3</p>
                   <p>• Preview your recording before uploading</p>
                 </div>
               </div>
