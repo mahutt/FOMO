@@ -98,7 +98,7 @@
 #define NOTE_DS8 4978
 #define REST 0
 
-#define BUZZER 21
+#define BUZZER 17
 
 struct Song {
   const int* melody;
